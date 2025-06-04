@@ -1,0 +1,382 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  actions: read
+  checks: write
+  security-events: write
+  pull-requests: write
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: >
+    -Dmaven.repo.local=.m2/repository 
+    -Xmx2048m 
+    -XX:+UseG1GC 
+    -Daether.connector.http.connectionMaxTtl=25
+    -Dmaven.artifact.threads=8
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Validate Project
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 2
+          retry_wait_seconds: 30
+          command: mvn clean validate compile -B --no-transfer-progress -DskipTests
+
+      - name: Verify Dependencies
+        run: |
+          mvn dependency:analyze -B --no-transfer-progress -Pquality
+          mvn dependency:tree -B --no-transfer-progress | tee dependency-tree.txt
+
+      - name: Code Style Check (Spotless)
+        run: mvn spotless:check -B --no-transfer-progress
+
+      - name: Security Analysis (SpotBugs)
+        run: mvn spotbugs:check -B --no-transfer-progress
+
+      - name: Upload Dependency Tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-analysis
+          path: dependency-tree.txt
+          retention-days: 7
+
+  test:
+    name: Test Suite (Java ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [ 17, 21, 22 ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+
+      - name: Run Tests & Coverage Check
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: mvn clean verify -B --no-transfer-progress -Djava.version=${{ matrix.java }}
+
+      - name: List test report files
+        if: always() && matrix.java == 17
+        run: |
+          echo "Surefire reports:"
+          ls -l target/surefire-reports || true
+          echo "Failsafe reports:"
+          ls -l target/failsafe-reports || true
+          echo "JaCoCo reports:"
+          ls -l target/site/jacoco* || true
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.java == 17
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/site/jacoco-merged/jacoco.xml,target/site/jacoco/jacoco.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - name: Upload Test Results
+        uses: dorny/test-reporter@v1
+        if: always() && matrix.java == 17
+        with:
+          name: Test Results (Java ${{ matrix.java }})
+          path: target/surefire-reports/TEST-*.xml,target/failsafe-reports/TEST-*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-snapshot: ${{ steps.version.outputs.is-snapshot }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Extract Version
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is-snapshot=$(echo $VERSION | grep -q SNAPSHOT && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: Build Package
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 2
+          retry_wait_seconds: 30
+          command: mvn clean package -B --no-transfer-progress -DskipTests
+
+      - name: Generate Documentation
+        run: mvn javadoc:javadoc -B --no-transfer-progress
+
+      - name: Verify JAR Structure
+        run: |
+          jar -tf target/logdash-*.jar | head -20
+          echo "JAR size: $(du -h target/logdash-*.jar | cut -f1)"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ steps.version.outputs.version }}
+          path: |
+            target/*-${{ steps.version.outputs.version }}.jar
+            !target/*-tests.jar
+            !target/original-*.jar
+            target/site/apidocs/**
+          retention-days: ${{ steps.version.outputs.is-snapshot == 'true' && 7 || 90 }}
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 15
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'security-scan')) ||
+      startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Build for Security Scan
+        run: mvn clean compile -B --no-transfer-progress -DskipTests
+
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  release:
+    name: Release to GitHub Packages
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    timeout-minutes: 15
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Configure Maven Settings
+        uses: whelk-io/maven-settings-xml-action@v22
+        with:
+          servers: |
+            [
+              {
+                "id": "github",
+                "username": "${env.GITHUB_ACTOR}",
+                "password": "${env.GITHUB_TOKEN}"
+              }
+            ]
+
+      - name: Extract Version Info
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          
+          # Validate version matches tag
+          if [[ "v$VERSION" != "${GITHUB_REF#refs/tags/}" ]]; then
+            echo "::error::Version mismatch: POM version ($VERSION) doesn't match tag (${GITHUB_REF#refs/tags/})"
+            exit 1
+          fi
+
+      - name: Build and Deploy to GitHub Packages
+        run: |
+          mvn clean deploy -B --no-transfer-progress \
+            -Prelease \
+            -DperformRelease=true \
+            -DskipTests=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-artifacts-*
+          merge-multiple: true
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-assets
+          cp target/logdash-${{ steps.version.outputs.version }}.jar release-assets/
+          cp target/logdash-${{ steps.version.outputs.version }}-sources.jar release-assets/
+          cp target/logdash-${{ steps.version.outputs.version }}-javadoc.jar release-assets/
+          
+          # Create checksums
+          cd release-assets
+          sha256sum *.jar > checksums.sha256
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.jar
+            release-assets/checksums.sha256
+          generate_release_notes: true
+          draft: false
+          body: |
+            # 🚀 Logdash Java SDK
+      
+            Official Java SDK for [Logdash.io](https://logdash.io) – Zero-configuration observability for developers.
+      
+            ## ✨ Features
+      
+            - **Zero Configuration**: Start logging and tracking metrics in seconds
+            - **Real-time Dashboard**: Cloud-hosted interface with live data updates
+            - **Structured Logging**: Multiple log levels with rich context support
+            - **Custom Metrics**: Track counters, gauges, and business metrics
+            - **Async & Fast**: Non-blocking, production-ready, framework-agnostic
+            - **Java 17+ Compatible**: Works with Java 17, 21, 22+
+      
+            ## 📦 Installation
+      
+            **Maven**
+            ```xml
+            <dependency>
+                <groupId>io.logdash</groupId>
+                <artifactId>logdash</artifactId>
+                <version>${{ steps.version.outputs.version }}</version>
+            </dependency>
+            ```
+      
+            **Gradle**
+            ```gradle
+            implementation 'io.logdash:logdash:${{ steps.version.outputs.version }}'
+            ```
+      
+            **Direct JAR Download:**  
+            [Download from GitHub Releases](https://github.com/logdash-io/java-sdk/releases)
+      
+            ## 🏁 Quick Start
+      
+            ```java
+            var logdash = Logdash.builder()
+                .apiKey("your-api-key")
+                .build();
+      
+            logdash.logger().info("Application started");
+            logdash.metrics().increment("app_starts");
+            ```
+      
+            ## ⚙️ Requirements
+      
+            - Java 17 or higher
+            - Internet connection
+            - Logdash API key ([get yours](https://logdash.io))
+      
+            ## 📖 Documentation & Support
+      
+            - [Full Documentation](https://logdash.io/docs)
+            - [Live Demo](https://logdash.io/demo-dashboard)
+            - [GitHub Issues](https://github.com/logdash-io/java-sdk/issues)
+            - [Discord Community](https://discord.gg/naftPW4Hxe)
+            - [Email Support](mailto:support@logdash.io)
+      
+            ---
+      
+            _See below for full release notes and change log._
+
+      - name: Notify Deployment Success
+        run: |
+          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to GitHub Packages"
+          echo "📦 Available at: https://github.com/logdash-io/java-sdk/packages"
+
+  notification:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [validate, test, build, security-scan]
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Check Workflow Status
+        run: |
+          if [[ "${{ needs.validate.result }}" == "failure" || "${{ needs.test.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
+            echo "❌ Workflow failed on main branch"
+            echo "::error::Critical job failed on main branch"
+          else
+            echo "✅ Workflow completed successfully"
+          fi
