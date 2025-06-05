@@ -33,7 +33,7 @@ class LogdashIntegrationTest {
             // Rapid operations
             for (int i = 0; i < 50; i++) {
                 logger.info("Message " + i, Map.of("iteration", i));
-                metrics.increment("counter", i % 5);
+                metrics.mutate("counter", i % 5);
                 if (i % 5 == 0) {
                     metrics.set("batch", i / 5);
                 }
@@ -72,11 +72,11 @@ class LogdashIntegrationTest {
                     .isThrownBy(
                             () -> {
                                 metrics.set("users", 100);
-                                metrics.increment("requests");
-                                metrics.increment("requests", 5);
-                                metrics.decrement("errors");
-                                metrics.decrement("errors", 2);
-                                metrics.change("temperature", -5.5);
+                                metrics.mutate("requests", 1);
+                                metrics.mutate("requests", 5);
+                                metrics.mutate("errors", -1);
+                                metrics.mutate("errors", -2);
+                                metrics.mutate("temperature", -5.5);
                             });
         }
     }
@@ -110,7 +110,7 @@ class LogdashIntegrationTest {
                     .isThrownBy(
                             () -> {
                                 logdash.logger().info("Test message");
-                                logdash.metrics().increment("counter");
+                                logdash.metrics().mutate("counter", 1);
                             });
         }
     }
@@ -147,10 +147,10 @@ class LogdashIntegrationTest {
                 }
 
                 // Various metrics
-                metrics.increment("iterations");
+                metrics.mutate("iterations", 1);
                 metrics.set("current_iteration", iteration);
                 if (iteration % 5 == 0) {
-                    metrics.change("batch_size", iteration % 3 == 0 ? 1 : -1);
+                    metrics.mutate("batch_size", iteration % 3 == 0 ? 1 : -1);
                 }
             }
 

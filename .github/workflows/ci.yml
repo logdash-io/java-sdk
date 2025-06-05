@@ -339,7 +339,7 @@ jobs:
                 .build();
       
             logdash.logger().info("Application started");
-            logdash.metrics().increment("app_starts");
+            logdash.metrics().mutate("app_starts", 1);
             ```
       
             ## ⚙️ Requirements
@@ -354,7 +354,7 @@ jobs:
             - [Live Demo](https://logdash.io/demo-dashboard)
             - [GitHub Issues](https://github.com/logdash-io/java-sdk/issues)
             - [Discord Community](https://discord.gg/naftPW4Hxe)
-            - [Email Support](mailto:support@logdash.io)
+            - [Email Support](mailto:contact@logdash.io)
       
             ---
       

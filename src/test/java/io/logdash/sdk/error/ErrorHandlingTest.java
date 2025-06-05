@@ -31,7 +31,7 @@ class ErrorHandlingTest {
                             try (var logdash = Logdash.builder().apiKey(apiKey).build()) {
 
                                 logdash.logger().info("Test");
-                                logdash.metrics().increment("counter");
+                                logdash.metrics().mutate("counter", 1);
                             }
                         });
     }
@@ -79,7 +79,7 @@ class ErrorHandlingTest {
 
             for (int i = 0; i < 100; i++) {
                 logdash.logger().info("Stress test " + i);
-                logdash.metrics().increment("stress_counter");
+                logdash.metrics().mutate("stress_counter", 1);
             }
 
             assertThatNoException().isThrownBy(logdash::flush);
@@ -116,7 +116,7 @@ class ErrorHandlingTest {
                         () -> {
                             try {
                                 logdash.logger().info("Thread safety test " + iteration);
-                                logdash.metrics().increment("thread_counter");
+                                logdash.metrics().mutate("thread_counter", 1);
                                 logdash.metrics().set("thread_id", getThreadId());
                             } catch (Exception e) {
                                 exceptions.add(e);

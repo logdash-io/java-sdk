@@ -27,7 +27,7 @@ import java.util.concurrent.TimeoutException;
  * // Simple usage with API key
  * try (var logdash = Logdash.create("your-api-key")) {
  *     logdash.logger().info("Application started");
- *     logdash.metrics().increment("app.starts");
+ *     logdash.metrics().mutate("app.starts", 1);
  * }
  *
  * // Advanced configuration

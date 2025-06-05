@@ -33,8 +33,8 @@ public class ExampleApp {
             int apiCalls = random.nextInt(10) + 1;
 
             metrics.set(METRIC_ACTIVE_USERS, users);
-            metrics.change(METRIC_ACTIVE_USERS, 100);
-            metrics.increment(METRIC_API_REQUESTS, apiCalls);
+            metrics.mutate(METRIC_ACTIVE_USERS, 100);
+            metrics.mutate(METRIC_API_REQUESTS, apiCalls);
 
             logger.debug("Iteration " + i, Map.of("users", users, "apiCalls", apiCalls));
 

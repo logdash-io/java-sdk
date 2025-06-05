@@ -57,9 +57,9 @@ class PerformanceTest {
                                     logdash.logger().debug("Debug info " + iteration);
 
                                     // Metrics
-                                    logdash.metrics().increment("operations");
+                                    logdash.metrics().mutate("operations", 1);
                                     logdash.metrics().set("current_batch", iteration);
-                                    logdash.metrics().change("temperature", Math.random() * 10 - 5);
+                                    logdash.metrics().mutate("temperature", Math.random() * 10 - 5);
                                 },
                                 executor);
 

@@ -7,7 +7,7 @@ package io.logdash.sdk.metrics;
  *
  * <ul>
  *   <li>{@link #SET} - Replaces the current metric value with the provided value
- *   <li>{@link #CHANGE} - Modifies the current metric value by adding the provided delta
+ *   <li>{@link #MUTATE} - Modifies the current metric value by adding the provided delta
  * </ul>
  */
 public enum MetricType {
@@ -18,10 +18,10 @@ public enum MetricType {
     SET("set"),
 
     /**
-     * Change operation - modifies the current metric value by the provided delta. Use for
+     * Mutate operation - modifies the current metric value by the provided delta. Use for
      * counter-type metrics where you want to increment/decrement values.
      */
-    CHANGE("change");
+    MUTATE("change");
 
     private final String value;
 

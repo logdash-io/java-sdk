@@ -72,7 +72,7 @@ class JsonSerializerTest {
     @Test
     void should_serialize_metric_entry_with_double_value() {
         // Arrange
-        var metricEntry = new MetricEntry("temperature", 23.5, MetricType.CHANGE);
+        var metricEntry = new MetricEntry("temperature", 23.5, MetricType.MUTATE);
 
         // Act
         var json = serializer.serialize(metricEntry);
@@ -151,7 +151,7 @@ class JsonSerializerTest {
     void should_handle_negative_numbers() {
         // Arrange
         var negativeInt = new MetricEntry("negative", -42, MetricType.SET);
-        var negativeDouble = new MetricEntry("negative_double", -3.14, MetricType.CHANGE);
+        var negativeDouble = new MetricEntry("negative_double", -3.14, MetricType.MUTATE);
 
         // Act
         var intJson = serializer.serialize(negativeInt);

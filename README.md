@@ -106,7 +106,7 @@ public class Application {
 
         // Start logging and tracking metrics immediately
         logger.info("Application started");
-        metrics.increment("app_starts");
+        metrics.mutate("app_starts", 1);
 
         // Your application logic here
         processUserRequest(logger, metrics);
@@ -124,8 +124,8 @@ public class Application {
         ));
 
         metrics.set("active_users", 150);
-        metrics.increment("api_requests");
-        metrics.change("response_time_ms", -25);
+        metrics.mutate("api_requests", 1);
+        metrics.mutate("response_time_ms", -25);
     }
 }
 ```
@@ -137,7 +137,7 @@ public class Application {
     public static void main(String[] args) {
         try (var logdash = Logdash.create("your-api-key")) {
             logdash.logger().info("Application started");
-            logdash.metrics().increment("app.starts");
+            logdash.metrics().mutate("app.starts", 1);
 
             // Your application code here
 
@@ -197,7 +197,7 @@ public class UserController {
     @GetMapping("/users/{id}")
     public User getUser(@PathVariable Long id) {
         logger.info("Fetching user", Map.of("userId", id));
-        metrics.increment("user.fetch.requests");
+        metrics.mutate("user.fetch.requests", 1);
 
         var user = userService.findById(id);
 
@@ -282,19 +282,15 @@ Track business and technical metrics to monitor application performance:
 var metrics = logdash.metrics();
 
 // Counters - track events and occurrences
-metrics.increment("page_views");
-metrics.increment("api_requests", 5);
-metrics.increment("user_signups");
+metrics.mutate("page_views",1);
+metrics.mutate("api_requests",5);
+metrics.mutate("response_time_ms",-100);
+metrics.mutate("available_licenses",-1);
 
 // Gauges - track current values
 metrics.set("active_users", 1_250);
 metrics.set("memory_usage_mb", 512.5);
 metrics.set("queue_size", 0);
-
-// Changes - modify existing values
-metrics.change("response_time_ms", -100);
-metrics.change("error_rate", 0.05);
-metrics.decrement("available_licenses", 1);
 ```
 
 ## Configuration
@@ -432,7 +428,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🚀 **Live Demo**: [https://logdash.io/demo-dashboard](https://logdash.io/demo-dashboard)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/logdash-io/java-sdk/issues)
 - 💬 **Community**: [Discord Server](https://discord.gg/naftPW4Hxe)
-- 📧 **Support**: [support@logdash.io](mailto:support@logdash.io)
+- 📧 **Support**: [contact@logdash.io](mailto:contact@logdash.io)
 - 🔗 **Main Repository**: [https://github.com/logdash-io/](https://github.com/logdash-io/)
 
 ---

@@ -21,12 +21,12 @@ class MetricEntryTest {
     @Test
     void should_create_metric_entry_with_integer_value() {
         // Act
-        var metricEntry = new MetricEntry("request_count", 42, MetricType.CHANGE);
+        var metricEntry = new MetricEntry("request_count", 42, MetricType.MUTATE);
 
         // Assert
         assertThat(metricEntry.name()).isEqualTo("request_count");
         assertThat(metricEntry.value()).isEqualTo(42);
-        assertThat(metricEntry.operation()).isEqualTo(MetricType.CHANGE);
+        assertThat(metricEntry.operation()).isEqualTo(MetricType.MUTATE);
     }
 
     @Test
@@ -64,7 +64,7 @@ class MetricEntryTest {
     @Test
     void should_handle_negative_values() {
         // Act
-        var metricEntry = new MetricEntry("temperature_change", -5.2, MetricType.CHANGE);
+        var metricEntry = new MetricEntry("temperature_change", -5.2, MetricType.MUTATE);
 
         // Assert
         assertThat(metricEntry.value()).isEqualTo(-5.2);

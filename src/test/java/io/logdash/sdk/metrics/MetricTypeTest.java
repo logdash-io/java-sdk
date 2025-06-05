@@ -9,19 +9,20 @@ class MetricTypeTest {
     @Test
     void should_have_correct_values() {
         assertThat(MetricType.SET.getValue()).isEqualTo("set");
-        assertThat(MetricType.CHANGE.getValue()).isEqualTo("change");
+        assertThat(MetricType.MUTATE.getValue()).isEqualTo("change");
     }
 
     @Test
     void should_return_correct_string_representation() {
-        assertThat(MetricType.SET.toString()).isEqualTo("set");
-        assertThat(MetricType.CHANGE.toString()).isEqualTo("change");
+        assertThat(MetricType.SET.toString()).hasToString("set");
+        assertThat(MetricType.MUTATE.toString()).hasToString("change");
     }
 
     @Test
     void should_have_all_expected_types() {
         var types = MetricType.values();
-        assertThat(types).hasSize(2);
-        assertThat(types).contains(MetricType.SET, MetricType.CHANGE);
+        assertThat(types)
+                .hasSize(2)
+                .contains(MetricType.SET, MetricType.MUTATE);
     }
 }

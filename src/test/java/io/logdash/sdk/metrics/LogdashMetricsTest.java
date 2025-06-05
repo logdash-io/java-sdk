@@ -53,47 +53,19 @@ class LogdashMetricsTest {
     }
 
     @Test
-    void should_send_increment_metric() {
+    void should_send_mutate_metric() {
         // Act
-        metrics.increment("page_views");
+        metrics.mutate("temperature", -5.5);
 
         // Assert
         then(transport).should().sendMetric(any(MetricEntry.class));
-    }
-
-    @Test
-    void should_send_increment_metric_with_custom_amount() {
-        // Act
-        metrics.increment("requests", 5);
-
-        // Assert
-        then(transport).should().sendMetric(any(MetricEntry.class));
-    }
-
-    @Test
-    void should_send_change_metric() {
-        // Act
-        metrics.change("temperature", -5.5);
-
-        // Assert
-        then(transport).should().sendMetric(any(MetricEntry.class));
-    }
-
-    @Test
-    void should_handle_decrement_operations() {
-        // Act
-        metrics.decrement("counter");
-        metrics.decrement("errors", 5);
-
-        // Assert
-        then(transport).should(times(2)).sendMetric(any(MetricEntry.class));
     }
 
     @Test
     void should_handle_decimal_values_correctly() {
         // Act
         metrics.set("temperature", 23.5);
-        metrics.change("pressure", -1.2);
+        metrics.mutate("pressure", -1.2);
 
         // Assert
         then(transport).should(times(2)).sendMetric(any(MetricEntry.class));
@@ -103,7 +75,7 @@ class LogdashMetricsTest {
     void should_handle_negative_values() {
         // Act
         metrics.set("deficit", -100);
-        metrics.change("altitude", -50.5);
+        metrics.mutate("altitude", -50.5);
 
         // Assert
         then(transport).should(times(2)).sendMetric(any(MetricEntry.class));

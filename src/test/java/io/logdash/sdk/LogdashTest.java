@@ -143,7 +143,7 @@ class LogdashTest {
                         () -> {
                             try (var sdk = Logdash.create("test-key")) {
                                 sdk.logger().info("Test message", Map.of("key", "value"));
-                                sdk.metrics().increment("test_counter");
+                                sdk.metrics().mutate("test_counter", 1);
                             }
                             // Auto-close should work without issues
                         });
@@ -197,7 +197,7 @@ class LogdashTest {
                         () -> {
                             try {
                                 sdk.logger().info("Concurrent message " + iteration);
-                                sdk.metrics().increment("concurrent_counter");
+                                sdk.metrics().mutate("concurrent_counter", 1);
                             } catch (Exception e) {
                                 exceptions.add(e);
                             } finally {
