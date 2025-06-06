@@ -10,7 +10,11 @@ METRICS_SEED=$(awk 'BEGIN{srand(); print int(rand()*1000000)+1}')
 echo "Generated metrics seed: $METRICS_SEED"
 
 echo "Building LogDash Java demo Docker image (using published package)..."
-docker build --no-cache -t logdash-java-demo -f check-deployed-package/Dockerfile .
+docker build --no-cache \
+  --build-arg GITHUB_TOKEN="${GITHUB_TOKEN}" \
+  --build-arg GITHUB_ACTOR="${GITHUB_ACTOR}" \
+  -t logdash-java-demo \
+  -f check-deployed-package/Dockerfile .
 
 echo
 echo "Running LogDash Java demo..."

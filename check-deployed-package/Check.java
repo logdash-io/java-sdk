@@ -38,7 +38,7 @@ public class Check {
             int seedValue = Integer.parseInt(metricsSeed);
             metrics.set("users", seedValue);
             metrics.mutate("users", 1);
-            
+
             // Wait to ensure data is sent
             try {
                 Thread.sleep(2000);
