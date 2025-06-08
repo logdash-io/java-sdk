@@ -1,0 +1,38 @@
+name: Check deployed package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-deployed-package:
+    name: Check deployed package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make run script executable
+        run: chmod +x check-deployed-package/run.sh
+
+      - name: Verify environment variables
+        run: |
+          echo "GITHUB_ACTOR: ${{ github.actor }}"
+          echo "Has GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN != '' }}"
+          echo "Has LOGDASH_API_KEY: ${{ secrets.LOGDASH_API_KEY != '' }}"
+
+      - name: Run LogDash demo
+        env:
+          LOGDASH_API_KEY: ${{ secrets.LOGDASH_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: ./check-deployed-package/run.sh
