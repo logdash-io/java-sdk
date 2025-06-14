@@ -1,4 +1,4 @@
-package com.logdash.check;
+package io.logdash.check;
 
 import io.logdash.sdk.Logdash;
 

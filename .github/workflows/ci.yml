@@ -217,7 +217,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
         continue-on-error: true
 
-  release:
+  github-release:
     name: Release to GitHub Packages
     runs-on: ubuntu-latest
     needs: [build, security-scan]
@@ -266,20 +266,117 @@ jobs:
       - name: Build and Deploy to GitHub Packages
         run: |
           mvn clean deploy -B --no-transfer-progress \
-            -Prelease \
+            -Pgithub-release \
             -DperformRelease=true \
             -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: build-artifacts-*
-          merge-multiple: true
-
-      - name: Prepare Release Assets
+      - name: Notify GitHub Release Success
         run: |
+          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to GitHub Packages"
+          echo "📦 Available at: https://github.com/logdash-io/java-sdk/packages"
+
+  maven-central-release:
+    name: Release to Maven Central
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    timeout-minutes: 30
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Import GPG key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import --no-tty
+          gpg --list-secret-keys --keyid-format LONG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Configure Maven Settings for Central
+        uses: whelk-io/maven-settings-xml-action@v22
+        with:
+          servers: |
+            [
+              {
+                "id": "central",
+                "username": "${env.CENTRAL_TOKEN_USERNAME}",
+                "password": "${env.CENTRAL_TOKEN_PASSWORD}"
+              }
+            ]
+
+      - name: Extract Version Info
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          
+          # Validate version matches tag
+          if [[ "v$VERSION" != "${GITHUB_REF#refs/tags/}" ]]; then
+            echo "::error::Version mismatch: POM version ($VERSION) doesn't match tag (${GITHUB_REF#refs/tags/})"
+            exit 1
+          fi
+
+      - name: Build and Deploy to Maven Central
+        run: |
+          mvn clean deploy -B --no-transfer-progress \
+            -Pmaven-central-release \
+            -DskipTests=true
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Wait for Central Processing
+        run: |
+          echo "⏳ Waiting for Maven Central processing..."
+          sleep 60
+          echo "✅ Maven Central processing should be complete"
+
+      - name: Notify Maven Central Success
+        run: |
+          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to Maven Central"
+          echo "📦 Will be available at: https://central.sonatype.com/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
+          echo "🌐 Maven Central: https://search.maven.org/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [github-release, maven-central-release]
+    timeout-minutes: 10
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Extract Version Info
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Release Artifacts
+        run: |
+          mvn clean package -B --no-transfer-progress -DskipTests=true
           mkdir -p release-assets
           cp target/logdash-${{ steps.version.outputs.version }}.jar release-assets/
           cp target/logdash-${{ steps.version.outputs.version }}-sources.jar release-assets/
@@ -299,7 +396,7 @@ jobs:
           generate_release_notes: true
           draft: false
           body: |
-            # 🚀 Logdash Java SDK
+            # 🚀 Logdash Java SDK ${{ steps.version.outputs.version }}
       
             Official Java SDK for [Logdash.io](https://logdash.io) – Zero-configuration observability for developers.
       
@@ -314,7 +411,7 @@ jobs:
       
             ## 📦 Installation
       
-            **Maven**
+            **Maven Central**
             ```xml
             <dependency>
                 <groupId>io.logdash</groupId>
@@ -327,9 +424,6 @@ jobs:
             ```gradle
             implementation 'io.logdash:logdash:${{ steps.version.outputs.version }}'
             ```
-      
-            **Direct JAR Download:**  
-            [Download from GitHub Releases](https://github.com/logdash-io/java-sdk/releases)
       
             ## 🏁 Quick Start
       
@@ -360,23 +454,27 @@ jobs:
       
             _See below for full release notes and change log._
 
-      - name: Notify Deployment Success
-        run: |
-          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to GitHub Packages"
-          echo "📦 Available at: https://github.com/logdash-io/java-sdk/packages"
-
   notification:
     name: Notification
     runs-on: ubuntu-latest
-    needs: [validate, test, build, security-scan]
-    if: always() && github.ref == 'refs/heads/main'
+    needs: [validate, test, build, security-scan, github-release, maven-central-release]
+    if: always() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
 
     steps:
       - name: Check Workflow Status
         run: |
           if [[ "${{ needs.validate.result }}" == "failure" || "${{ needs.test.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
-            echo "❌ Workflow failed on main branch"
-            echo "::error::Critical job failed on main branch"
+            echo "❌ Workflow failed"
+            echo "::error::Critical job failed"
+          elif [[ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]]; then
+            if [[ "${{ needs.github-release.result }}" == "success" && "${{ needs.maven-central-release.result }}" == "success" ]]; then
+              echo "🎉 Release completed successfully!"
+              echo "📦 Available on GitHub Packages and Maven Central"
+            else
+              echo "⚠️ Release partially failed"
+              echo "GitHub Release: ${{ needs.github-release.result }}"
+              echo "Maven Central: ${{ needs.maven-central-release.result }}"
+            fi
           else
-            echo "✅ Workflow completed successfully"
+            echo "✅ Workflow completed successfully on main branch"
           fi
