@@ -27,25 +27,13 @@ metrics without complex configurations. Just add the SDK and start monitoring yo
 
 ### Installation
 
-**Option 1: Download from GitHub Releases (Recommended)**
+**Maven Central**
 
-1. Download the latest JAR from [GitHub Releases](https://github.com/logdash-io/java-sdk/releases)
-2. Add to your project classpath
-
-**Option 2: GitHub Packages (Maven/Gradle)**
-
-Add GitHub Packages repository to your build configuration:
+Add the dependency to your project:
 
 **Maven:**
 
 ```xml
-<repositories>
-    <repository>
-        <id>github</id>
-        <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-    </repository>
-</repositories>
-
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
@@ -56,18 +44,20 @@ Add GitHub Packages repository to your build configuration:
 **Gradle:**
 
 ```gradle
-repositories {
-    maven {
-        url = uri("https://maven.pkg.github.com/logdash-io/java-sdk")
-    }
-}
-
 dependencies {
     implementation 'io.logdash:logdash:0.1.0'
 }
 ```
 
-**Option 3: Local Installation**
+**Gradle (Kotlin DSL):**
+
+```kotlin
+dependencies {
+    implementation("io.logdash:logdash:0.1.0")
+}
+```
+
+**Local Installation**
 
 ```bash
 # Clone and install locally
@@ -85,8 +75,6 @@ Then use in your project:
     <version>0.1.0</version>
 </dependency>
 ```
-
-> **Note:** Maven Central publication is planned for future releases. For now, use GitHub Releases or GitHub Packages.
 
 ### Basic Usage
 
