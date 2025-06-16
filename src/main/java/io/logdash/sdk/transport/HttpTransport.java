@@ -38,7 +38,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
     private static final String METRICS_ENDPOINT = "/metrics";
 
     private static final String API_KEY_HEADER = "project-api-key";
-    private static final String USER_AGENT = "logdash-java-sdk/0.1.1";
+    private static final String USER_AGENT = "logdash-java-sdk/0.1.2";
     private static final String CONTENT_TYPE = "application/json";
 
     private final LogdashConfig config;
