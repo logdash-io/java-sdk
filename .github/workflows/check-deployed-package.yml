@@ -2,10 +2,10 @@ name: Check deployed package
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_run:
+    workflows: ['CI/CD Pipeline']
+    types:
+      - completed
     branches:
       - main
 

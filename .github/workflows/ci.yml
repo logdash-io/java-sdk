@@ -129,7 +129,7 @@ jobs:
   build:
     name: Build & Package
     runs-on: ubuntu-latest
-    needs: [validate, test]
+    needs: [ validate, test ]
     timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -220,7 +220,7 @@ jobs:
   github-release:
     name: Release to GitHub Packages
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
+    needs: [ build, security-scan ]
     timeout-minutes: 15
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -263,6 +263,23 @@ jobs:
             exit 1
           fi
 
+      - name: Check if version exists
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          
+          # Check if version already exists in GitHub Packages
+          if gh api /orgs/logdash-io/packages/maven/io.logdash.logdash/versions --jq '.[] | .name' | grep -q "^$VERSION$"; then
+            echo "::error::Version $VERSION already exists in GitHub Packages"
+            echo "Either delete the existing version or bump the version in pom.xml"
+            exit 1
+          fi
+          
+          echo "✅ Version $VERSION is available for release"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and Deploy to GitHub Packages
         run: |
           mvn clean deploy -B --no-transfer-progress \
@@ -280,7 +297,7 @@ jobs:
   maven-central-release:
     name: Release to Maven Central
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
+    needs: [ build, security-scan ]
     timeout-minutes: 30
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -295,11 +312,15 @@ jobs:
           distribution: 'temurin'
 
       - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Verify GPG import
         run: |
-          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import --no-tty
           gpg --list-secret-keys --keyid-format LONG
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          echo "✅ GPG key imported successfully"
 
       - name: Configure Maven Settings for Central
         uses: whelk-io/maven-settings-xml-action@v22
@@ -330,7 +351,8 @@ jobs:
         run: |
           mvn clean deploy -B --no-transfer-progress \
             -Pmaven-central-release \
-            -DskipTests=true
+            -DskipTests=true \
+            -Dgpg.keyname="$GPG_KEY_ID"
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
@@ -351,7 +373,7 @@ jobs:
   create-github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [github-release, maven-central-release]
+    needs: [ github-release, maven-central-release ]
     timeout-minutes: 10
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -397,20 +419,20 @@ jobs:
           draft: false
           body: |
             # 🚀 Logdash Java SDK ${{ steps.version.outputs.version }}
-      
+            
             Official Java SDK for [Logdash.io](https://logdash.io) – Zero-configuration observability for developers.
-      
+            
             ## ✨ Features
-      
+            
             - **Zero Configuration**: Start logging and tracking metrics in seconds
             - **Real-time Dashboard**: Cloud-hosted interface with live data updates
             - **Structured Logging**: Multiple log levels with rich context support
             - **Custom Metrics**: Track counters, gauges, and business metrics
             - **Async & Fast**: Non-blocking, production-ready, framework-agnostic
             - **Java 17+ Compatible**: Works with Java 17, 21, 22+
-      
+            
             ## 📦 Installation
-      
+            
             **Maven Central**
             ```xml
             <dependency>
@@ -419,45 +441,45 @@ jobs:
                 <version>${{ steps.version.outputs.version }}</version>
             </dependency>
             ```
-      
+            
             **Gradle**
             ```gradle
             implementation 'io.logdash:logdash:${{ steps.version.outputs.version }}'
             ```
-      
+            
             ## 🏁 Quick Start
-      
+            
             ```java
             var logdash = Logdash.builder()
                 .apiKey("your-api-key")
                 .build();
-      
+            
             logdash.logger().info("Application started");
             logdash.metrics().mutate("app_starts", 1);
             ```
-      
+            
             ## ⚙️ Requirements
-      
+            
             - Java 17 or higher
             - Internet connection
             - Logdash API key ([get yours](https://logdash.io))
-      
+            
             ## 📖 Documentation & Support
-      
+            
             - [Full Documentation](https://logdash.io/docs)
             - [Live Demo](https://logdash.io/demo-dashboard)
             - [GitHub Issues](https://github.com/logdash-io/java-sdk/issues)
             - [Discord Community](https://discord.gg/naftPW4Hxe)
             - [Email Support](mailto:contact@logdash.io)
-      
+            
             ---
-      
+            
             _See below for full release notes and change log._
 
   notification:
     name: Notification
     runs-on: ubuntu-latest
-    needs: [validate, test, build, security-scan, github-release, maven-central-release]
+    needs: [ validate, test, build, security-scan, github-release, maven-central-release ]
     if: always() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
 
     steps:
