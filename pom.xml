@@ -557,7 +557,9 @@
                                         <arg>loopback</arg>
                                         <arg>--batch</arg>
                                         <arg>--no-tty</arg>
+                                        <arg>--yes</arg>
                                     </gpgArguments>
+                                    <keyname>${env.GPG_KEY_ID}</keyname>
                                 </configuration>
                             </execution>
                         </executions>
