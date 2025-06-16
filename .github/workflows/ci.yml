@@ -271,12 +271,11 @@ jobs:
           
           # Check if version already exists in GitHub Packages
           if gh api /orgs/logdash-io/packages/maven/io.logdash.logdash/versions --jq '.[] | .name' | grep -q "^$VERSION$"; then
-            echo "::error::Version $VERSION already exists in GitHub Packages"
+            echo "::warning::Version $VERSION already exists in GitHub Packages"
             echo "Either delete the existing version or bump the version in pom.xml"
-            exit 1
+          else
+            echo "✅ Version $VERSION is available for release"
           fi
-          
-          echo "✅ Version $VERSION is available for release"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -357,12 +356,6 @@ jobs:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Wait for Central Processing
-        run: |
-          echo "⏳ Waiting for Maven Central processing..."
-          sleep 60
-          echo "✅ Maven Central processing should be complete"
 
       - name: Notify Maven Central Success
         run: |

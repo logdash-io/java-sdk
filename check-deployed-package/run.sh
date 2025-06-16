@@ -11,8 +11,6 @@ echo "Generated metrics seed: $METRICS_SEED"
 
 echo "Building LogDash Java demo Docker image (using published package)..."
 docker build --no-cache \
-  --build-arg GITHUB_TOKEN="${GITHUB_TOKEN}" \
-  --build-arg GITHUB_ACTOR="${GITHUB_ACTOR}" \
   -t logdash-java-demo \
   -f check-deployed-package/Dockerfile .
 

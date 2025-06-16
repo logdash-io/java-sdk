@@ -6,13 +6,15 @@ on:
     workflows: ['CI/CD Pipeline']
     types:
       - completed
-    branches:
-      - main
 
 jobs:
   check-deployed-package:
     name: Check deployed package
     runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'refs/tags/v')
     permissions:
       contents: read
       packages: read
