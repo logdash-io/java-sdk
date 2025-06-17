@@ -4,7 +4,7 @@
 
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
     <packaging>jar</packaging>
 
     <name>Logdash Java SDK</name>
