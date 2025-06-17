@@ -37,7 +37,7 @@ Add the dependency to your project:
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.1.3</version>
+    <version>0.2.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -45,7 +45,7 @@ Add the dependency to your project:
 
 ```gradle
 dependencies {
-    implementation 'io.logdash:logdash:0.1.3'
+    implementation 'io.logdash:logdash:0.2.0-SNAPSHOT'
 }
 ```
 
@@ -53,7 +53,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.logdash:logdash:0.1.3")
+    implementation("io.logdash:logdash:0.2.0-SNAPSHOT")
 }
 ```
 
@@ -72,7 +72,7 @@ Then use in your project:
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.1.3</version>
+    <version>0.2.0-SNAPSHOT</version>
 </dependency>
 ```
 
