@@ -1,0 +1,283 @@
+name: Develop Branch Snapshots
+
+on:
+  push:
+    branches: [ develop ]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+
+jobs:
+  validate-develop:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    timeout-minutes: 15
+    outputs:
+      snapshot-version: ${{ steps.version.outputs.snapshot-version }}
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-develop-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-develop-
+            ${{ runner.os }}-maven-
+
+      - name: Verify snapshot version
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          if [[ ! $VERSION =~ .*-SNAPSHOT$ ]]; then
+            echo "❌ Error: Develop branch must have SNAPSHOT version, found: $VERSION"
+            exit 1
+          fi
+          echo "✅ Snapshot version verified: $VERSION"
+          echo "snapshot-version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Run quick validation
+        run: |
+          mvn clean validate compile -B --no-transfer-progress \
+            -DskipTests=true \
+            -Dspotless.check.skip=true
+
+  maven-central-snapshot:
+    runs-on: ubuntu-latest
+    needs: validate-develop
+    timeout-minutes: 25
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-develop-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-develop-
+            ${{ runner.os }}-maven-
+
+      - name: Configure Maven Central Snapshots
+        uses: whelk-io/maven-settings-xml-action@v22
+        with:
+          servers: |
+            [
+              {
+                "id": "central",
+                "username": "${{ secrets.CENTRAL_TOKEN_USERNAME }}",
+                "password": "${{ secrets.CENTRAL_TOKEN_PASSWORD }}"
+              }
+            ]
+
+      - name: Display snapshot version
+        run: |
+          echo "📦 Deploying snapshot version: ${{ needs.validate-develop.outputs.snapshot-version }}"
+
+      - name: Run comprehensive tests
+        run: |
+          mvn clean verify -B --no-transfer-progress \
+            -Dmaven.test.failure.ignore=false \
+            -Dfailsafe.rerunFailingTestsCount=2
+
+      - name: Deploy to Maven Central Snapshots
+        run: |
+          mvn deploy -B --no-transfer-progress \
+            -Pmaven-central-release \
+            -DskipTests=true \
+            -Dcentral.autoPublish=true
+        env:
+          SONATYPE_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+
+      - name: Verify Maven Central snapshot deployment
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          echo "⏳ Waiting for snapshot propagation..."
+          sleep 10
+          
+          # Check if snapshot metadata is available
+          METADATA_URL="https://central.sonatype.com/repository/maven-snapshots/io/logdash/logdash/$VERSION/maven-metadata.xml"
+          if curl -s -f "$METADATA_URL" > /dev/null; then
+            echo "✅ Snapshot metadata confirmed at Maven Central"
+          else
+            echo "⚠️ Snapshot metadata not yet available (may take time to propagate)"
+          fi
+
+      - name: Display deployment info
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          echo "✅ Successfully deployed $VERSION to Maven Central Snapshots"
+          echo "📦 Available at: https://central.sonatype.com/repository/maven-snapshots/io/logdash/logdash/$VERSION/"
+          echo ""
+          echo "🔍 Maven dependency:"
+          echo "<dependency>"
+          echo "    <groupId>io.logdash</groupId>"
+          echo "    <artifactId>logdash</artifactId>"
+          echo "    <version>$VERSION</version>"
+          echo "</dependency>"
+          echo ""
+          echo "🔍 Gradle dependency:"
+          echo "implementation 'io.logdash:logdash:$VERSION'"
+
+      - name: Notify deployment status
+        if: failure()
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          echo "❌ Snapshot deployment failed for version $VERSION"
+          echo "Check logs above for deployment errors"
+
+  github-packages-snapshot:
+    runs-on: ubuntu-latest
+    needs: validate-develop
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/develop'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-develop-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-develop-
+            ${{ runner.os }}-maven-
+
+      - name: Configure Maven Settings for GitHub Packages
+        uses: whelk-io/maven-settings-xml-action@v22
+        with:
+          servers: |
+            [
+              {
+                "id": "github",
+                "username": "${env.GITHUB_ACTOR}",
+                "password": "${env.GITHUB_TOKEN}"
+              }
+            ]
+
+      - name: Deploy to GitHub Packages (Backup)
+        run: |
+          mvn deploy -B --no-transfer-progress \
+            -Pgithub-release \
+            -DperformRelease=true \
+            -DskipTests=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify GitHub Packages deployment
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          echo "✅ Backup snapshot deployed to GitHub Packages: $VERSION"
+          echo "📦 Available at: https://github.com/logdash-io/java-sdk/packages"
+
+  verify-deployments:
+    runs-on: ubuntu-latest
+    needs: [ maven-central-snapshot, github-packages-snapshot ]
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Final verification
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          echo "🔍 Final verification for snapshot: $VERSION"
+          
+          # Wait a bit more for propagation
+          echo "⏳ Waiting for complete propagation..."
+          sleep 10
+          
+          # Check Maven Central snapshots
+          METADATA_URL="https://central.sonatype.com/repository/maven-snapshots/io/logdash/logdash/$VERSION/maven-metadata.xml"
+          if curl -s -f "$METADATA_URL" > /dev/null; then
+            echo "✅ Maven Central snapshot confirmed and accessible"
+          else
+            echo "⚠️ Maven Central snapshot metadata not accessible yet"
+          fi
+          
+          echo ""
+          echo "📋 Deployment Summary:"
+          echo "🏗️ Maven Central Snapshots: ${{ needs.maven-central-snapshot.result }}"
+          echo "📦 GitHub Packages: ${{ needs.github-packages-snapshot.result }}"
+          echo "🔢 Version: $VERSION"
+          echo "🌐 Repository: https://central.sonatype.com/repository/maven-snapshots/"
+
+  notification:
+    runs-on: ubuntu-latest
+    needs: [ validate-develop, maven-central-snapshot, github-packages-snapshot, verify-deployments ]
+    if: always() && github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Workflow status summary
+        run: |
+          VERSION="${{ needs.validate-develop.outputs.snapshot-version }}"
+          
+          echo "📊 Develop Branch Snapshot Workflow Summary"
+          echo "============================================="
+          echo "🔢 Version: $VERSION"
+          echo "📅 Triggered: ${{ github.event_name }}"
+          echo ""
+          echo "Job Results:"
+          echo "✓ Validation: ${{ needs.validate-develop.result }}"
+          echo "✓ Maven Central: ${{ needs.maven-central-snapshot.result }}"
+          echo "✓ GitHub Packages: ${{ needs.github-packages-snapshot.result }}"
+          echo "✓ Verification: ${{ needs.verify-deployments.result }}"
+          echo ""
+          
+          # Check overall success
+          if [[ "${{ needs.validate-develop.result }}" == "success" && 
+                "${{ needs.maven-central-snapshot.result }}" == "success" && 
+                "${{ needs.github-packages-snapshot.result }}" == "success" ]]; then
+            echo "🎉 All snapshot deployments completed successfully!"
+            echo "📦 $VERSION is now available for testing"
+          else
+            echo "⚠️ Some deployments may have failed. Check individual job results above."
+          fi
+          
+          echo ""
+          echo "🔗 Quick Access:"
+          echo "- Maven Central: https://central.sonatype.com/repository/maven-snapshots/io/logdash/logdash/$VERSION/"
+          echo "- GitHub Packages: https://github.com/logdash-io/java-sdk/packages"
+          echo "- Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

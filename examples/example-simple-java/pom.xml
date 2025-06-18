@@ -16,16 +16,17 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
 
-        <logdash-sdk.version>0.2.0-SNAPSHOT</logdash-sdk.version>
         <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
         <maven-exec-plugin.version>3.1.1</maven-exec-plugin.version>
+
+        <logdash.version>0.2.0-SNAPSHOT</logdash.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>io.logdash</groupId>
             <artifactId>logdash</artifactId>
-            <version>${logdash-sdk.version}</version>
+            <version>${logdash.version}</version>
         </dependency>
     </dependencies>
 
@@ -53,4 +54,25 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>snapshot-repo</id>
+            <activation>
+                <property>
+                    <name>logdash.version</name>
+                    <value>*-SNAPSHOT</value>
+                </property>
+            </activation>
+            <repositories>
+                <repository>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                    <id>github-snapshots</id>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
 </project>
