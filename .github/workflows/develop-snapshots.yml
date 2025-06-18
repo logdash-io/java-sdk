@@ -86,6 +86,17 @@ jobs:
             ${{ runner.os }}-maven-develop-
             ${{ runner.os }}-maven-
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Verify GPG import
+        run: |
+          gpg --list-secret-keys --keyid-format LONG
+          echo "✅ GPG key imported successfully"
+
       - name: Configure Maven Central Snapshots
         uses: whelk-io/maven-settings-xml-action@v22
         with:
@@ -93,8 +104,8 @@ jobs:
             [
               {
                 "id": "central",
-                "username": "${{ secrets.CENTRAL_TOKEN_USERNAME }}",
-                "password": "${{ secrets.CENTRAL_TOKEN_PASSWORD }}"
+                "username": "${env.CENTRAL_TOKEN_USERNAME}",
+                "password": "${env.CENTRAL_TOKEN_PASSWORD}"
               }
             ]
 
@@ -110,13 +121,16 @@ jobs:
 
       - name: Deploy to Maven Central Snapshots
         run: |
-          mvn deploy -B --no-transfer-progress \
+          mvn clean deploy -B --no-transfer-progress \
             -Pmaven-central-release \
             -DskipTests=true \
-            -Dcentral.autoPublish=true
+            -Dcentral.autoPublish=true \
+            -Dgpg.keyname="$GPG_KEY_ID"
         env:
-          SONATYPE_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
 
       - name: Verify Maven Central snapshot deployment
         run: |
