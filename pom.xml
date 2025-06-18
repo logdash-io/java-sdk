@@ -35,19 +35,6 @@
         <url>https://github.com/logdash-io/java-sdk</url>
     </scm>
 
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-        </repository>
-        <snapshotRepository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-        </snapshotRepository>
-    </distributionManagement>
-
     <properties>
         <java.version>17</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
@@ -483,6 +470,29 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>local-dev</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
+                <maven.javadoc.failOnWarnings>false</maven.javadoc.failOnWarnings>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>${maven-deploy-plugin.version}</version>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- GitHub Packages Release Profile -->
         <profile>
             <id>github-release</id>
@@ -492,6 +502,18 @@
                     <value>true</value>
                 </property>
             </activation>
+            <distributionManagement>
+                <repository>
+                    <id>github</id>
+                    <name>GitHub Packages</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </repository>
+                <snapshotRepository>
+                    <id>github</id>
+                    <name>GitHub Packages</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </snapshotRepository>
+            </distributionManagement>
             <build>
                 <plugins>
                     <!-- Maven Deploy Plugin -->
@@ -501,6 +523,7 @@
                         <version>${maven-deploy-plugin.version}</version>
                         <configuration>
                             <deployAtEnd>true</deployAtEnd>
+                            <skip>false</skip>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -519,7 +542,7 @@
                 <snapshotRepository>
                     <id>central</id>
                     <name>Central Repository Snapshots</name>
-                    <url>https://central.sonatype.com/api/v1/publisher</url>
+                    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
                 </snapshotRepository>
             </distributionManagement>
             <build>
@@ -562,6 +585,15 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>${maven-deploy-plugin.version}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

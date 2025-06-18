@@ -263,12 +263,9 @@ jobs:
             exit 1
           fi
 
-      - name: Check if version exists
+      - name: Check if version exists in GitHub Packages
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          
+          VERSION=${{ steps.version.outputs.version }}
           # Check if version already exists in GitHub Packages
           if gh api /orgs/logdash-io/packages/maven/io.logdash.logdash/versions --jq '.[] | .name' | grep -q "^$VERSION$"; then
             echo "::warning::Version $VERSION already exists in GitHub Packages"
@@ -346,6 +343,21 @@ jobs:
             exit 1
           fi
 
+      - name: Check if version exists on Maven Central
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Check if version exists on Maven Central using search API
+          SEARCH_RESULT=$(curl -s "https://search.maven.org/solrsearch/select?q=g:io.logdash+AND+a:logdash+AND+v:$VERSION&rows=1&wt=json")
+          COUNT=$(echo "$SEARCH_RESULT" | jq -r '.response.numFound')
+          
+          if [[ "$COUNT" != "0" ]]; then
+            echo "::error::Version $VERSION already exists on Maven Central"
+            echo "Cannot redeploy existing version to Maven Central"
+            exit 1
+          else
+            echo "✅ Version $VERSION is available for Maven Central release"
+          fi
+
       - name: Build and Deploy to Maven Central
         run: |
           mvn clean deploy -B --no-transfer-progress \
@@ -356,12 +368,24 @@ jobs:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+
+      - name: Verify Maven Central Deployment
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Check if artifact appears in Central Portal (deployment confirmation)
+          if curl -s -f "https://central.sonatype.com/api/internal/browse/component?namespace=io.logdash&name=logdash&version=$VERSION" > /dev/null; then
+            echo "✅ Deployment confirmed via Central Portal API"
+          else
+            echo "⚠️ Not yet visible via Central Portal API (may take time to propagate)"
+          fi
 
       - name: Notify Maven Central Success
         run: |
           echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to Maven Central"
           echo "📦 Will be available at: https://central.sonatype.com/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
           echo "🌐 Maven Central: https://search.maven.org/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
+          echo "⏱️ Note: It may take up to 2 hours for the artifact to be searchable via Maven Central"
 
   create-github-release:
     name: Create GitHub Release
@@ -468,6 +492,14 @@ jobs:
             ---
             
             _See below for full release notes and change log._
+
+      - name: Deployment Summary
+        run: |
+          echo "📋 Deployment Status Summary:"
+          echo "✅ GitHub Packages: ${{ needs.github-release.result }}"
+          echo "✅ Maven Central: ${{ needs.maven-central-release.result }}"
+          echo "📦 Version: ${{ steps.version.outputs.version }}"
+          echo "🔗 Maven Central: https://central.sonatype.com/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
 
   notification:
     name: Notification
