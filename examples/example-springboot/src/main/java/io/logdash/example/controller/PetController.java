@@ -4,6 +4,8 @@ import io.logdash.example.domain.Pet;
 import io.logdash.example.domain.PetType;
 import io.logdash.example.service.PetService;
 import io.logdash.sdk.Logdash;
+import io.logdash.sdk.log.LogdashLogger;
+import io.logdash.sdk.metrics.LogdashMetrics;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,18 +18,17 @@ import java.util.Map;
 public class PetController {
 
     private final PetService petService;
-    private final Logdash logdash;
+    private final LogdashLogger logger;
+    private final LogdashMetrics metrics;
 
     public PetController(PetService petService, Logdash logdash) {
         this.petService = petService;
-        this.logdash = logdash;
+        this.logger = logdash.logger();
+        this.metrics = logdash.metrics();
     }
 
     @GetMapping
     public ResponseEntity<List<Pet>> getAllPets() {
-        var logger = logdash.logger();
-        var metrics = logdash.metrics();
-
         var pets = petService.getAllPets();
 
         logger.info("Retrieved all pets", Map.of(
@@ -45,9 +46,6 @@ public class PetController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Pet> getPet(@PathVariable Long id) {
-        var logger = logdash.logger();
-        var metrics = logdash.metrics();
-
         var pet = petService.findById(id);
 
         if (pet.isPresent()) {
@@ -69,9 +67,6 @@ public class PetController {
 
     @PostMapping
     public ResponseEntity<Pet> createPet(@RequestBody CreatePetRequest request) {
-        var logger = logdash.logger();
-        var metrics = logdash.metrics();
-
         try {
             var pet = petService.addPet(request.name(), request.type());
 
@@ -100,9 +95,6 @@ public class PetController {
 
     @PostMapping("/random")
     public ResponseEntity<Pet> createRandomPet() {
-        var logger = logdash.logger();
-        var metrics = logdash.metrics();
-
         var pet = petService.createRandomPet();
 
         logger.info("Random pet created", Map.of(
@@ -120,9 +112,6 @@ public class PetController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePet(@PathVariable Long id) {
-        var logger = logdash.logger();
-        var metrics = logdash.metrics();
-
         boolean deleted = petService.deletePet(id);
 
         if (deleted) {
