@@ -409,13 +409,6 @@ mvn failsafe:integration-test
 mvn clean verify
 ```
 
-### Code Quality
-
-- Follow existing code style
-- Ensure all tests pass
-- Add tests for new features
-- Update documentation as needed
-
 ### GitFlow Workflow
 
 ```bash
@@ -430,6 +423,13 @@ git push origin feat/awesome-feature
 
 # Create pull request to develop branch
 ```
+
+### Code Quality
+
+- Follow existing code style
+- Ensure all tests pass
+- Add tests for new features
+- Update documentation as needed
 
 ## License
 
