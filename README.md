@@ -288,7 +288,7 @@ To see the logs or metrics, go to your project dashboard at [logdash.io](https:/
 
 ![Logs Dashboard](docs/images/logs.png)
 
-![Metrics Dashboard](docs/images/delta.png)  
+![Metrics Dashboard](docs/images/delta.png)
 
 ## Configuration
 
@@ -413,7 +413,7 @@ mvn clean verify
 
 ```bash
 # Start new feature
-git checkout develop && git pull origin develop
+git checkout dev && git pull origin dev
 git checkout -b feat/awesome-feature
 
 # Development and testing
@@ -421,7 +421,7 @@ mvn clean verify
 git add . && git commit -m "feat: add awesome feature"
 git push origin feat/awesome-feature
 
-# Create pull request to develop branch
+# Create pull request to dev branch
 ```
 
 ### Code Quality
