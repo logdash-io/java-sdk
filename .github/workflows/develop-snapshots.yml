@@ -2,7 +2,7 @@ name: Develop Branch Snapshots
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ dev ]
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
@@ -14,7 +14,7 @@ env:
 jobs:
   validate-develop:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/dev'
     timeout-minutes: 15
     outputs:
       snapshot-version: ${{ steps.version.outputs.snapshot-version }}
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout develop
         uses: actions/checkout@v4
         with:
-          ref: develop
+          ref: dev
           fetch-depth: 0
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
@@ -62,13 +62,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-develop
     timeout-minutes: 25
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/dev'
 
     steps:
       - name: Checkout develop
         uses: actions/checkout@v4
         with:
-          ref: develop
+          ref: dev
           fetch-depth: 0
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
@@ -159,7 +159,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-develop
     timeout-minutes: 15
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/dev'
 
     permissions:
       contents: read
@@ -169,7 +169,7 @@ jobs:
       - name: Checkout develop
         uses: actions/checkout@v4
         with:
-          ref: develop
+          ref: dev
 
       - name: Setup JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -217,7 +217,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ maven-central-snapshot, github-packages-snapshot ]
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/dev'
 
     steps:
       - name: Final verification
@@ -247,7 +247,7 @@ jobs:
   notification:
     runs-on: ubuntu-latest
     needs: [ validate-develop, maven-central-snapshot, github-packages-snapshot, verify-deployments ]
-    if: always() && github.ref == 'refs/heads/develop'
+    if: always() && github.ref == 'refs/heads/dev'
 
     steps:
       - name: Workflow status summary
