@@ -178,7 +178,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
-                    <release>${java.version}</release>
+                    <release>${maven.compiler.release}</release>
                     <compilerArgs>
                         <arg>-parameters</arg>
                         <arg>-Xlint:unchecked</arg>
@@ -416,6 +416,13 @@
                             <spaces>true</spaces>
                             <spacesPerTab>4</spacesPerTab>
                         </indent>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                            <include>examples/**/src/main/java/**/*.java</include>
+                            <include>examples/**/src/test/java/**/*.java</include>
+                            <include>check-deployed-package/**/*.java</include>
+                        </includes>
                         <excludes>
                             <exclude>**/target/**</exclude>
                             <exclude>**/generated/**</exclude>
@@ -425,6 +432,7 @@
                     <markdown>
                         <includes>
                             <include>**/*.md</include>
+                            <include>examples/**/*.md</include>
                         </includes>
                         <flexmark/>
                         <excludes>
@@ -446,6 +454,7 @@
                         <includes>
                             <include>pom.xml</include>
                             <include>**/pom.xml</include>
+                            <include>examples/**/pom.xml</include>
                         </includes>
                         <sortPom>
                             <expandEmptyElements>false</expandEmptyElements>

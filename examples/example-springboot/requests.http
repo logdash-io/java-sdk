@@ -1,0 +1,23 @@
+### Variables
+@baseUrl = http://localhost:8080
+
+### Get all pets
+GET {{baseUrl}}/api/pets
+
+### Get pet by ID
+GET {{baseUrl}}/api/pets/1
+
+### Create a new pet
+POST {{baseUrl}}/api/pets
+Content-Type: application/json
+
+{
+  "name": "Fluffy",
+  "type": "DOG"
+}
+
+### Create a random pet
+POST {{baseUrl}}/api/pets/random
+
+### Delete a pet by ID
+DELETE {{baseUrl}}/api/pets/3
