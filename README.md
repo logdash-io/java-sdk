@@ -1,18 +1,19 @@
 # Logdash Java SDK
 
 [![GitHub Release](https://img.shields.io/github/v/release/logdash-io/java-sdk)](https://github.com/logdash-io/java-sdk/releases)
+[![Maven Central](https://img.shields.io/maven-central/v/io.logdash/logdash)](https://central.sonatype.com/artifact/io.logdash/logdash)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Java Version](https://img.shields.io/badge/Java-17+-blue.svg)](https://openjdk.java.net/projects/jdk/17/)
 [![CI/CD](https://github.com/logdash-io/java-sdk/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/logdash-io/java-sdk/actions)
+[![Coverage](https://img.shields.io/codecov/c/github/logdash-io/java-sdk)](https://codecov.io/gh/logdash-io/java-sdk)
 
-Official Java SDK for [Logdash.io](https://logdash.io/) - Zero-configuration observability platform designed for developers working on side projects and prototypes.
+> **Official Java SDK for [Logdash.io](https://logdash.io/) - Zero-configuration observability platform designed for developers working on side projects and prototypes.**
 
 ## Why Logdash?
 
-Most observability solutions feel overwhelming for hobby projects. Logdash provides instant logging and real-time
-metrics without complex configurations. Just add the SDK and start monitoring your application immediately.
+Most observability solutions feel overwhelming for small projects and prototypes. Logdash provides **instant logging and real-time metrics** without complex configurations. Just add the SDK and start monitoring your application immediately.
 
-## Features
+## Key Features
 
 - **🚀 Zero Configuration**: Start logging and tracking metrics in seconds
 - **📊 Real-time Dashboard**: Cloud-hosted interface with live data updates
@@ -23,15 +24,13 @@ metrics without complex configurations. Just add the SDK and start monitoring yo
 - **🔧 Framework Agnostic**: Works with Spring Boot, Quarkus, Micronaut, or standalone apps
 - **☕ Java 17+ Compatible**: Supports Java 17, 21, and all newer versions
 
-## Quick Start
+## Pre-requisites
 
-### Installation
+Setup your free project in less than 2 minutes at [logdash.io](https://logdash.io/)
 
-**Maven Central**
+## Installation
 
-Add the dependency to your project:
-
-**Maven:**
+### Maven Central
 
 ```xml
 <dependency>
@@ -41,15 +40,15 @@ Add the dependency to your project:
 </dependency>
 ```
 
-**Gradle:**
+### Gradle
 
-```gradle
+```groovy
 dependencies {
     implementation 'io.logdash:logdash:0.2.0-SNAPSHOT'
 }
 ```
 
-**Gradle (Kotlin DSL):**
+### Gradle (Kotlin DSL)
 
 ```kotlin
 dependencies {
@@ -57,7 +56,7 @@ dependencies {
 }
 ```
 
-**Local Installation**
+### Local Installation
 
 ```bash
 # Clone and install locally
@@ -75,6 +74,8 @@ Then use in your project:
     <version>0.2.0-SNAPSHOT</version>
 </dependency>
 ```
+
+## Quick Start
 
 ### Basic Usage
 
@@ -270,16 +271,24 @@ Track business and technical metrics to monitor application performance:
 var metrics = logdash.metrics();
 
 // Counters - track events and occurrences
-metrics.mutate("page_views",1);
-metrics.mutate("api_requests",5);
-metrics.mutate("response_time_ms",-100);
-metrics.mutate("available_licenses",-1);
+metrics.mutate("page_views", 1);
+metrics.mutate("api_requests", 5);
+metrics.mutate("response_time_ms", -100);
+metrics.mutate("available_licenses", -1);
 
 // Gauges - track current values
 metrics.set("active_users", 1_250);
 metrics.set("memory_usage_mb", 512.5);
 metrics.set("queue_size", 0);
 ```
+
+## View Your Data
+
+To see the logs or metrics, go to your project dashboard at [logdash.io](https://logdash.io/app/clusters)
+
+![Logs Dashboard](docs/images/logs.png)
+
+![Metrics Dashboard](docs/images/delta.png)  
 
 ## Configuration
 
@@ -306,9 +315,11 @@ Logdash logdash = Logdash.builder()
         .build();
 ```
 
+## Configuration
+
 ### All Configuration Options
 
-|         Option          |         Default          |           Description            |
+|        Parameter        |         Default          |           Description            |
 |-------------------------|--------------------------|----------------------------------|
 | `apiKey`                | `null`                   | Your Logdash API key (required)  |
 | `baseUrl`               | `https://api.logdash.io` | Logdash API endpoint             |
@@ -371,7 +382,7 @@ Check out the [`examples/`](./examples) directory for a complete sample applicat
 
 - **Java 17 or higher** (tested on Java 17, 21, 22)
 - **Internet connection** for sending data to Logdash
-- **Valid API key** from [Logdash.io](https://logdash.io)
+- **Valid API key** from [logdash.io](https://logdash.io)
 
 ## Contributing
 
@@ -383,7 +394,6 @@ We welcome contributions! Here's how to get started:
 git clone https://github.com/logdash-io/java-sdk.git
 cd java-sdk
 mvn clean compile
-mvn test
 ```
 
 ### Running Tests
@@ -401,10 +411,25 @@ mvn clean verify
 
 ### Code Quality
 
-- Follow existing code style (checkstyle configuration included)
+- Follow existing code style
 - Ensure all tests pass
 - Add tests for new features
 - Update documentation as needed
+
+### GitFlow Workflow
+
+```bash
+# Start new feature
+git checkout develop && git pull origin develop
+git checkout -b feat/awesome-feature
+
+# Development and testing
+mvn clean verify
+git add . && git commit -m "feat: add awesome feature"
+git push origin feat/awesome-feature
+
+# Create pull request to develop branch
+```
 
 ## License
 
