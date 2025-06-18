@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: logdash-petclinic-demo
+
+logdash:
+  api-key: ${LOGDASH_API_KEY:your-api-key}
+  base-url: https://api.logdash.io
+  enable-console-output: true
+  enable-verbose-logging: false
+  request-timeout-ms: 10000
+  max-concurrent-requests: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    io.logdash.example: INFO
+    root: WARN

@@ -4,7 +4,7 @@
 
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.1.3</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>Logdash Java SDK</name>
@@ -34,19 +34,6 @@
         <developerConnection>scm:git:ssh://github.com/logdash-io/java-sdk.git</developerConnection>
         <url>https://github.com/logdash-io/java-sdk</url>
     </scm>
-
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-        </repository>
-        <snapshotRepository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-        </snapshotRepository>
-    </distributionManagement>
 
     <properties>
         <java.version>17</java.version>
@@ -191,7 +178,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
-                    <release>${java.version}</release>
+                    <release>${maven.compiler.release}</release>
                     <compilerArgs>
                         <arg>-parameters</arg>
                         <arg>-Xlint:unchecked</arg>
@@ -429,6 +416,13 @@
                             <spaces>true</spaces>
                             <spacesPerTab>4</spacesPerTab>
                         </indent>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                            <include>examples/**/src/main/java/**/*.java</include>
+                            <include>examples/**/src/test/java/**/*.java</include>
+                            <include>check-deployed-package/**/*.java</include>
+                        </includes>
                         <excludes>
                             <exclude>**/target/**</exclude>
                             <exclude>**/generated/**</exclude>
@@ -438,6 +432,7 @@
                     <markdown>
                         <includes>
                             <include>**/*.md</include>
+                            <include>examples/**/*.md</include>
                         </includes>
                         <flexmark/>
                         <excludes>
@@ -459,6 +454,7 @@
                         <includes>
                             <include>pom.xml</include>
                             <include>**/pom.xml</include>
+                            <include>examples/**/pom.xml</include>
                         </includes>
                         <sortPom>
                             <expandEmptyElements>false</expandEmptyElements>
@@ -483,6 +479,29 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>local-dev</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
+                <maven.javadoc.failOnWarnings>false</maven.javadoc.failOnWarnings>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>${maven-deploy-plugin.version}</version>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- GitHub Packages Release Profile -->
         <profile>
             <id>github-release</id>
@@ -492,6 +511,18 @@
                     <value>true</value>
                 </property>
             </activation>
+            <distributionManagement>
+                <repository>
+                    <id>github</id>
+                    <name>GitHub Packages</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </repository>
+                <snapshotRepository>
+                    <id>github</id>
+                    <name>GitHub Packages</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </snapshotRepository>
+            </distributionManagement>
             <build>
                 <plugins>
                     <!-- Maven Deploy Plugin -->
@@ -501,6 +532,7 @@
                         <version>${maven-deploy-plugin.version}</version>
                         <configuration>
                             <deployAtEnd>true</deployAtEnd>
+                            <skip>false</skip>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -519,7 +551,7 @@
                 <snapshotRepository>
                     <id>central</id>
                     <name>Central Repository Snapshots</name>
-                    <url>https://central.sonatype.com/api/v1/publisher</url>
+                    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
                 </snapshotRepository>
             </distributionManagement>
             <build>
@@ -562,6 +594,15 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>${maven-deploy-plugin.version}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

@@ -1,0 +1,17 @@
+spring:
+  main:
+    banner-mode: off
+  output:
+    ansi:
+      enabled: never
+
+logdash:
+  api-key: test-key
+  enable-console-output: false
+  enable-verbose-logging: false
+
+logging:
+  level:
+    io.logdash.example: WARN
+    org.springframework: WARN
+    org.mockito: WARN
