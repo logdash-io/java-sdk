@@ -36,7 +36,7 @@ Setup your free project in less than 2 minutes at [logdash.io](https://logdash.i
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -44,7 +44,7 @@ Setup your free project in less than 2 minutes at [logdash.io](https://logdash.i
 
 ```groovy
 dependencies {
-    implementation 'io.logdash:logdash:0.2.0'
+    implementation 'io.logdash:logdash:0.3.0-SNAPSHOT'
 }
 ```
 
@@ -52,7 +52,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.logdash:logdash:0.2.0")
+    implementation("io.logdash:logdash:0.3.0-SNAPSHOT")
 }
 ```
 
@@ -71,7 +71,7 @@ Then use in your project:
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
