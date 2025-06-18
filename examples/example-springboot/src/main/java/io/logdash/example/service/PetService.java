@@ -21,7 +21,7 @@ public class PetService {
     public PetService() {
         addPet("Burek", PetType.DOG);
         addPet("Mruczek", PetType.CAT);
-        addPet("Rex", PetType.DOG);
+        addPet("Olek", PetType.BIRD);
     }
 
     public Pet addPet(String name, PetType type) {

@@ -43,7 +43,7 @@ class SpringBootExampleApplicationTest {
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("Burek", "Mruczek", "Rex");
+        assertThat(response.getBody()).contains("Burek", "Mruczek", "Olek");
     }
 
     @Test
