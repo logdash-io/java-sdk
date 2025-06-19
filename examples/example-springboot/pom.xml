@@ -58,7 +58,7 @@
     </dependencies>
 
     <repositories>
-        <!-- Maven Central Snapshots -->
+        <!-- GitHub Packages Snapshots -->
         <repository>
             <releases>
                 <enabled>false</enabled>
@@ -67,9 +67,9 @@
                 <enabled>true</enabled>
                 <updatePolicy>interval:60</updatePolicy>
             </snapshots>
-            <id>maven-central-snapshots</id>
-            <name>Maven Central Snapshots</name>
-            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <id>github-snapshots</id>
+            <name>GitHub Packages Snapshots</name>
+            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
         </repository>
     </repositories>
 
@@ -118,8 +118,26 @@
                     <snapshots>
                         <updatePolicy>never</updatePolicy>
                     </snapshots>
-                    <id>maven-central-snapshots</id>
-                    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+                    <id>github-snapshots</id>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </repository>
+            </repositories>
+        </profile>
+
+        <profile>
+            <id>snapshot-repo</id>
+            <repositories>
+                <repository>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                        <updatePolicy>always</updatePolicy>
+                    </snapshots>
+                    <id>github-snapshots</id>
+                    <name>GitHub Packages Snapshots</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
                 </repository>
             </repositories>
         </profile>
