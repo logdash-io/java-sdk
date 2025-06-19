@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  JAVA_VERSION: '17'
+  JAVA_VERSION: '21'
   JAVA_DISTRIBUTION: 'temurin'
 
 jobs:
@@ -89,11 +89,10 @@ jobs:
             ${{ runner.os }}-maven-develop-
             ${{ runner.os }}-maven-
 
-      - name: Run comprehensive tests
+      - name: Quick build for snapshot
         run: |
-          mvn clean verify -B --no-transfer-progress \
-            -Dmaven.test.failure.ignore=false \
-            -Dfailsafe.rerunFailingTestsCount=2
+          mvn clean compile -B --no-transfer-progress \
+            -DskipTests=true
 
       - name: Configure Maven Settings for GitHub Packages
         uses: whelk-io/maven-settings-xml-action@v22

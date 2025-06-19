@@ -505,6 +505,11 @@
         <!-- GitHub Packages Snapshot Profile -->
         <profile>
             <id>github-packages-snapshot</id>
+            <activation>
+                <property>
+                    <name>!performRelease</name>
+                </property>
+            </activation>
             <distributionManagement>
                 <snapshotRepository>
                     <id>github</id>
