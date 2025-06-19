@@ -176,7 +176,8 @@ jobs:
         run: |
           cd examples/example-simple-java
           mvn clean compile -B --no-transfer-progress \
-            -Psnapshot-repo
+            -Psnapshot-repo \
+            -U
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -184,7 +185,8 @@ jobs:
         run: |
           cd examples/example-springboot
           mvn clean compile -B --no-transfer-progress \
-            -Psnapshot-repo
+            -Psnapshot-repo \
+            -U
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

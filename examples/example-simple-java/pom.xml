@@ -73,7 +73,7 @@
                     <snapshots>
                         <enabled>true</enabled>
                     </snapshots>
-                    <id>github-snapshots</id>
+                    <id>github</id>
                     <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
                 </repository>
             </repositories>

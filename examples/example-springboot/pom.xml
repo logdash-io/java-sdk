@@ -67,7 +67,7 @@
                 <enabled>true</enabled>
                 <updatePolicy>interval:60</updatePolicy>
             </snapshots>
-            <id>github-snapshots</id>
+            <id>github</id>
             <name>GitHub Packages Snapshots</name>
             <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
         </repository>
@@ -113,15 +113,6 @@
             <activation>
                 <activeByDefault>true</activeByDefault>
             </activation>
-            <repositories>
-                <repository>
-                    <snapshots>
-                        <updatePolicy>never</updatePolicy>
-                    </snapshots>
-                    <id>github-snapshots</id>
-                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-                </repository>
-            </repositories>
         </profile>
 
         <profile>
@@ -135,7 +126,7 @@
                         <enabled>true</enabled>
                         <updatePolicy>always</updatePolicy>
                     </snapshots>
-                    <id>github-snapshots</id>
+                    <id>github</id>
                     <name>GitHub Packages Snapshots</name>
                     <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
                 </repository>
