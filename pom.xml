@@ -502,6 +502,31 @@
             </build>
         </profile>
 
+        <!-- GitHub Packages Snapshot Profile -->
+        <profile>
+            <id>github-packages-snapshot</id>
+            <distributionManagement>
+                <snapshotRepository>
+                    <id>github</id>
+                    <name>GitHub Packages Snapshots</name>
+                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
+                </snapshotRepository>
+            </distributionManagement>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>${maven-deploy-plugin.version}</version>
+                        <configuration>
+                            <deployAtEnd>true</deployAtEnd>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- GitHub Packages Release Profile -->
         <profile>
             <id>github-release</id>
@@ -525,7 +550,6 @@
             </distributionManagement>
             <build>
                 <plugins>
-                    <!-- Maven Deploy Plugin -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-deploy-plugin</artifactId>
@@ -548,15 +572,9 @@
                     <name>Central Repository</name>
                     <url>https://central.sonatype.com/api/v1/publisher</url>
                 </repository>
-                <snapshotRepository>
-                    <id>ossrh</id>
-                    <name>Central Repository OSSRH Snapshots</name>
-                    <url>https://s01.oss.sonatype.org/content/repositories/snapshots/</url>
-                </snapshotRepository>
             </distributionManagement>
             <build>
                 <plugins>
-                    <!-- Central Publishing Maven Plugin -->
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
@@ -569,8 +587,6 @@
                             <checksums>required</checksums>
                         </configuration>
                     </plugin>
-
-                    <!-- GPG Signing Plugin -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
@@ -595,7 +611,6 @@
                             </execution>
                         </executions>
                     </plugin>
-
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-deploy-plugin</artifactId>
