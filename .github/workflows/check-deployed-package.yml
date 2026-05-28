@@ -36,6 +36,7 @@ jobs:
       - name: Run LogDash demo
         env:
           LOGDASH_API_KEY: ${{ secrets.LOGDASH_API_KEY }}
+          LOGDASH_PERSONAL_API_KEY: ${{ secrets.LOGDASH_PERSONAL_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: ./check-deployed-package/run.sh
