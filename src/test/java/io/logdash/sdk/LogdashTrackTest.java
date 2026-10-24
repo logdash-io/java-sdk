@@ -26,6 +26,37 @@ class LogdashTrackTest {
             "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * A number that JSON serialization cannot write, since Jackson writes unknown numbers with
+     * {@code toString()}.
+     */
+    private static final class UnprintableNumber extends Number {
+        @Override
+        public int intValue() {
+            return 4;
+        }
+
+        @Override
+        public long longValue() {
+            return 4;
+        }
+
+        @Override
+        public float floatValue() {
+            return 4;
+        }
+
+        @Override
+        public double doubleValue() {
+            return 4;
+        }
+
+        @Override
+        public String toString() {
+            throw new IllegalStateException("toString failed");
+        }
+    }
+
     private WireMockServer wireMockServer;
     private PrintStream originalOut;
     private PrintStream originalErr;
@@ -218,6 +249,72 @@ class LogdashTrackTest {
 
         // Assert
         wireMockServer.verify(1, postRequestedFor(urlEqualTo("/events")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void should_drop_events_instead_of_blocking_when_the_send_queue_is_full(boolean verbose) {
+        // Arrange: a slow response holds the only request slot, so the queue fills up
+        wireMockServer.stubFor(
+                post(urlEqualTo("/events")).willReturn(aResponse().withStatus(202).withFixedDelay(2000)));
+
+        try (var logdash =
+                     logdashBuilder()
+                             .maxConcurrentRequests(1)
+                             .shutdownTimeoutMs(500L)
+                             .enableVerboseLogging(verbose)
+                             .build()) {
+            // Act
+            long start = System.nanoTime();
+            for (int i = 0; i < 500; i++) {
+                logdash.track("agent_run");
+            }
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+            // Assert
+            assertThat(elapsedMs).isLessThan(1000);
+        }
+        assertThat(capturedOut.toString().contains("rejected because the send queue is full"))
+                .isEqualTo(verbose);
+    }
+
+    @Test
+    void should_drop_invalid_event_silently_without_verbose_logging() {
+        // Act
+        try (var logdash = logdashBuilder().build()) {
+            logdash.track("Agent_Run");
+            logdash.flush();
+        }
+
+        // Assert
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo("/events")));
+        assertThat(capturedErr.toString()).doesNotContain("Event dropped");
+    }
+
+    @Test
+    void should_drop_events_tracked_after_close() {
+        // Arrange
+        var logdash = logdashBuilder().build();
+        logdash.close();
+
+        // Act
+        logdash.track("agent_run");
+
+        // Assert
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo("/events")));
+    }
+
+    @Test
+    void should_drop_event_whose_props_fail_to_serialize() {
+        // Act
+        try (var logdash = logdashBuilder().enableVerboseLogging(true).build()) {
+            logdash.track("agent_run", Map.of("steps", new UnprintableNumber()));
+            logdash.flush();
+        }
+
+        // Assert
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo("/events")));
+        assertThat(capturedErr.toString()).contains("Failed to serialize event entry");
     }
 
     @Test

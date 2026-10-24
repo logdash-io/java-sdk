@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -28,6 +29,15 @@ class EventEntryTest {
         assertThat(eventEntry.userId()).isEqualTo("42");
         assertThat(eventEntry.id().version()).isEqualTo(4);
         assertThat(eventEntry.id()).isNotEqualTo(new EventEntry("agent_run", null, null).id());
+    }
+
+    @Test
+    void should_keep_the_given_id() {
+        // Arrange
+        var id = UUID.randomUUID();
+
+        // Act & Assert
+        assertThat(new EventEntry("agent_run", null, null, id).id()).isEqualTo(id);
     }
 
     @ParameterizedTest

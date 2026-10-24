@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <ul>
  *   <li>Non-blocking concurrency control using tryAcquire
+ *   <li>Never blocks the caller: a request that finds the queue full is dropped
  *   <li>Request tracking from submission, so flush and shutdown wait for every request sent
  *   <li>Optimized thread pool sizing
  *   <li>Fast retry logic with exponential backoff
@@ -104,10 +105,6 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
 
     @Override
     public CompletableFuture<Void> sendEvent(EventEntry eventEntry) {
-        if (shutdownInitiated.get() || closed.get()) {
-            return CompletableFuture.completedFuture(null);
-        }
-
         try {
             String json = serializer.serialize(eventEntry);
             return sendWithRetry(EVENTS_ENDPOINT, json, "POST");
@@ -133,7 +130,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
 
         final long sequenceId = requestCounter.incrementAndGet();
 
-        CompletableFuture<Void> request = CompletableFuture.runAsync(
+        Runnable send =
                 () -> {
                     boolean acquired = false;
                     try {
@@ -155,6 +152,10 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                         for (int attempt = 1; attempt <= config.maxRetries() + 1; attempt++) {
                             try {
                                 sendHttpRequest(endpoint, json, method, attempt, sequenceId);
+                                return;
+                            } catch (InterruptedException e) {
+                                // close() interrupts requests in flight: stop instead of retrying
+                                Thread.currentThread().interrupt();
                                 return;
                             } catch (Exception e) {
                                 lastException = e;
@@ -192,8 +193,18 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                             rateLimiter.release();
                         }
                     }
-                },
-                executorService);
+                };
+
+        CompletableFuture<Void> request;
+        try {
+            request = CompletableFuture.runAsync(send, executorService);
+        } catch (RejectedExecutionException e) {
+            // A full queue drops the request, so sending never blocks the caller
+            if (config.enableVerboseLogging()) {
+                System.out.printf("Request #%d rejected because the send queue is full%n", sequenceId);
+            }
+            return CompletableFuture.completedFuture(null);
+        }
 
         // Tracked from submission, not from start, so a flush right after a send waits for it
         pendingRequests.add(request);
@@ -249,88 +260,64 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
     /**
      * Flushes all pending requests, including the ones still queued.
      *
-     * @return a future that completes when all pending requests finish
+     * @return a future that completes when all pending requests finish, or at the flush timeout
      */
     public CompletableFuture<Void> flush() {
-        return CompletableFuture.runAsync(
-                () -> {
-                    try {
-                        if (!pendingRequests.isEmpty()) {
-                            long timeoutMs = Math.min(config.shutdownTimeoutMs(), 5000);
-                            boolean completed = awaitPendingRequests(timeoutMs);
-
-                            if (completed && config.enableVerboseLogging()) {
+        return awaitPendingRequests(Math.min(config.shutdownTimeoutMs(), 5000))
+                .thenAccept(
+                        completed -> {
+                            if (!config.enableVerboseLogging()) {
+                                return;
+                            }
+                            if (completed) {
                                 System.out.println("All pending requests flushed successfully");
-                            } else if (!completed && config.enableVerboseLogging()) {
+                            } else {
                                 System.out.printf(
                                         "Flush timeout, %d requests still pending%n", pendingRequests.size());
                             }
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                },
-                executorService);
+                        });
     }
 
     @Override
     public Optional<CompletableFuture<Void>> shutdown() {
         if (shutdownInitiated.compareAndSet(false, true)) {
+            if (config.enableVerboseLogging()) {
+                System.out.println("Initiating HTTP transport shutdown...");
+                System.out.printf("Waiting for %d pending HTTP requests...%n", pendingRequests.size());
+            }
+
             return Optional.of(
-                    CompletableFuture.runAsync(
-                            () -> {
-                                try {
-                                    if (config.enableVerboseLogging()) {
-                                        System.out.println("Initiating HTTP transport shutdown...");
-                                    }
-
-                                    long timeoutMs = Math.min(config.shutdownTimeoutMs(), 3000);
-
-                                    if (!pendingRequests.isEmpty()) {
-                                        if (config.enableVerboseLogging()) {
-                                            System.out.printf(
-                                                    "Waiting for %d pending HTTP requests...%n", pendingRequests.size());
+                    awaitPendingRequests(Math.min(config.shutdownTimeoutMs(), 3000))
+                            .thenAccept(
+                                    completed -> {
+                                        closed.set(true);
+                                        if (!config.enableVerboseLogging()) {
+                                            return;
                                         }
-
-                                        boolean completed = awaitPendingRequests(timeoutMs);
-
-                                        if (completed && config.enableVerboseLogging()) {
+                                        if (completed) {
                                             System.out.println("All HTTP requests completed successfully");
-                                        } else if (!completed && config.enableVerboseLogging()) {
+                                        } else {
                                             System.out.printf(
                                                     "Shutdown timeout exceeded, %d requests may be lost%n",
                                                     pendingRequests.size());
                                         }
-                                    }
-
-                                } catch (InterruptedException e) {
-                                    Thread.currentThread().interrupt();
-                                } finally {
-                                    closed.set(true);
-                                }
-                            },
-                            executorService));
+                                    }));
         }
         return Optional.of(CompletableFuture.completedFuture(null));
     }
 
     /**
-     * Waits for every request sent so far.
+     * Waits for every request sent so far, without holding a thread, so a full queue never rejects
+     * the wait.
      *
      * @param timeoutMs the longest time to wait
-     * @return true when all of them finished within the timeout
+     * @return a future of true when all of them finish within the timeout, or false
      */
-    private boolean awaitPendingRequests(long timeoutMs) throws InterruptedException {
-        try {
-            CompletableFuture.allOf(pendingRequests.toArray(new CompletableFuture<?>[0]))
-                    .get(timeoutMs, TimeUnit.MILLISECONDS);
-            return true;
-        } catch (ExecutionException e) {
-            // A request that failed has finished too
-            return true;
-        } catch (TimeoutException e) {
-            return false;
-        }
+    private CompletableFuture<Boolean> awaitPendingRequests(long timeoutMs) {
+        return CompletableFuture.allOf(pendingRequests.toArray(new CompletableFuture<?>[0]))
+                // A request that failed has finished too
+                .handle((result, error) -> true)
+                .completeOnTimeout(false, timeoutMs, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -377,7 +364,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                             t.setDaemon(true);
                             return t;
                         },
-                        new ThreadPoolExecutor.CallerRunsPolicy());
+                        new ThreadPoolExecutor.AbortPolicy());
 
         executor.allowCoreThreadTimeOut(true);
         return executor;
