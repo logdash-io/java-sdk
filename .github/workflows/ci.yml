@@ -2,30 +2,28 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
-    tags: [ 'v*' ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, dev ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A release in progress must finish; a newer merge waits and releases after it.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  contents: write
-  actions: read
-  checks: write
-  security-events: write
-  pull-requests: write
+  contents: read
+
+defaults:
+  run:
+    shell: bash # with pipefail, so a failing command in a pipe fails the step
 
 env:
   JAVA_VERSION: '17'
   MAVEN_OPTS: >
-    -Dmaven.repo.local=.m2/repository 
-    -Xmx2048m 
-    -XX:+UseG1GC 
+    -Xmx2048m
+    -XX:+UseG1GC
     -Daether.connector.http.connectionMaxTtl=25
     -Dmaven.artifact.threads=8
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   validate:
@@ -35,27 +33,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+          cache: maven
 
       - name: Validate Project
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 2
           retry_wait_seconds: 30
           command: mvn clean validate compile -B --no-transfer-progress -DskipTests
 
+      # The quality profile's execution, which fails on a warning; a bare dependency:analyze only warns.
       - name: Verify Dependencies
         run: |
-          mvn dependency:analyze -B --no-transfer-progress -Pquality
+          mvn test-compile dependency:analyze-only@analyze-dependencies -B --no-transfer-progress -Pquality
           mvn dependency:tree -B --no-transfer-progress | tee dependency-tree.txt
 
       - name: Code Style Check (Spotless)
@@ -65,7 +65,7 @@ jobs:
         run: mvn spotbugs:check -B --no-transfer-progress
 
       - name: Upload Dependency Tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-analysis
           path: dependency-tree.txt
@@ -76,6 +76,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      checks: write # the test report
     strategy:
       fail-fast: false
       matrix:
@@ -83,445 +87,175 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
+          cache: maven
 
       - name: Run Tests & Coverage Check
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 20
           max_attempts: 3
           retry_wait_seconds: 30
           command: mvn clean verify -B --no-transfer-progress -Djava.version=${{ matrix.java }}
 
-      - name: List test report files
-        if: always() && matrix.java == 17
-        run: |
-          echo "Surefire reports:"
-          ls -l target/surefire-reports || true
-          echo "Failsafe reports:"
-          ls -l target/failsafe-reports || true
-          echo "JaCoCo reports:"
-          ls -l target/site/jacoco* || true
-
       - name: Upload coverage reports to Codecov
         if: matrix.java == 17
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: target/site/jacoco-merged/jacoco.xml,target/site/jacoco/jacoco.xml
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
       - name: Upload Test Results
-        uses: dorny/test-reporter@v1
-        if: always() && matrix.java == 17
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && matrix.java == 17 }}
         with:
           name: Test Results (Java ${{ matrix.java }})
           path: target/surefire-reports/TEST-*.xml,target/failsafe-reports/TEST-*.xml
           reporter: java-junit
-          fail-on-error: false
+          fail-on-error: false # the test step has failed the job already
 
-  build:
-    name: Build & Package
+  test-scripts:
+    name: Test Suite (release scripts)
     runs-on: ubuntu-latest
-    needs: [ validate, test ]
-    timeout-minutes: 15
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      is-snapshot: ${{ steps.version.outputs.is-snapshot }}
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Setup JDK
-        uses: actions/setup-java@v4
+      - name: Setup Node
+        uses: actions/setup-node@v7
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          node-version: 24
 
-      - name: Extract Version
-        id: version
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "is-snapshot=$(echo $VERSION | grep -q SNAPSHOT && echo true || echo false)" >> $GITHUB_OUTPUT
-
-      - name: Build Package
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 2
-          retry_wait_seconds: 30
-          command: mvn clean package -B --no-transfer-progress -DskipTests
-
-      - name: Generate Documentation
-        run: mvn javadoc:javadoc -B --no-transfer-progress
-
-      - name: Verify JAR Structure
-        run: |
-          jar -tf target/logdash-*.jar | head -20
-          echo "JAR size: $(du -h target/logdash-*.jar | cut -f1)"
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ steps.version.outputs.version }}
-          path: |
-            target/*-${{ steps.version.outputs.version }}.jar
-            !target/*-tests.jar
-            !target/original-*.jar
-            target/site/apidocs/**
-          retention-days: ${{ steps.version.outputs.is-snapshot == 'true' && 7 || 90 }}
+      - name: Run Tests
+        run: node --test 'scripts/*.test.ts'
 
   security-scan:
     name: Security Scanning
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 15
-    if: >
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'security-scan')) ||
-      startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'security-scan')
+    permissions:
+      contents: read
+      security-events: write # the SARIF upload
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+          cache: maven
 
-      - name: Build for Security Scan
-        run: mvn clean compile -B --no-transfer-progress -DskipTests
+      # Online, Trivy fetches the dependencies' poms from Maven Central, which rate-limits it (429) and
+      # fails the scan. Maven puts them in ~/.m2 instead, where Trivy's offline scan finds them.
+      - name: Resolve Dependencies for Security Scan
+        run: for pom in pom.xml examples/*/pom.xml; do mvn dependency:tree -B --no-transfer-progress -q -f "$pom"; done
 
       - name: Run Trivy Scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
+        env:
+          TRIVY_OFFLINE_SCAN: true
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
 
-  github-release:
-    name: Release to GitHub Packages
+  # The version the merged commits call for; empty when none of them is a feat, fix, perf, or breaking change.
+  version:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ build, security-scan ]
-    timeout-minutes: 15
-    if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      next: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the tags and commits since the last release
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: next
+        run: |
+          next=$(node scripts/version.ts) # on its own line, so a crash fails the step instead of releasing nothing
+          echo "version=$next" >> "$GITHUB_OUTPUT"
 
+  # Publishes the merge to Maven Central, then tags it with a GitHub release.
+  release:
+    needs: [ validate, test, test-scripts, security-scan, version ]
+    if: needs.version.outputs.next != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
-      contents: write
-      packages: write
-
+      contents: write # the release and its tag
+    env:
+      V: ${{ needs.version.outputs.next }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-
-      - name: Configure Maven Settings
-        uses: whelk-io/maven-settings-xml-action@v22
-        with:
-          servers: |
-            [
-              {
-                "id": "github",
-                "username": "${env.GITHUB_ACTOR}",
-                "password": "${env.GITHUB_TOKEN}"
-              }
-            ]
-
-      - name: Extract Version Info
-        id: version
+          persist-credentials: false # keeps the token off disk while Maven plugins run
+      # A rerun after a deploy that succeeded skips to the tag, since Central rejects a version twice.
+      - id: central
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          
-          # Validate version matches tag
-          if [[ "v$VERSION" != "${GITHUB_REF#refs/tags/}" ]]; then
-            echo "::error::Version mismatch: POM version ($VERSION) doesn't match tag (${GITHUB_REF#refs/tags/})"
-            exit 1
-          fi
-
-      - name: Check if version exists in GitHub Packages
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          # Check if version already exists in GitHub Packages
-          if gh api /orgs/logdash-io/packages/maven/io.logdash.logdash/versions --jq '.[] | .name' | grep -q "^$VERSION$"; then
-            echo "::warning::Version $VERSION already exists in GitHub Packages"
-            echo "Either delete the existing version or bump the version in pom.xml"
-          else
-            echo "✅ Version $VERSION is available for release"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Deploy to GitHub Packages
-        run: |
-          mvn clean deploy -B --no-transfer-progress \
-            -Pgithub-release \
-            -DperformRelease=true \
-            -DskipTests=true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify GitHub Release Success
-        run: |
-          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to GitHub Packages"
-          echo "📦 Available at: https://github.com/logdash-io/java-sdk/packages"
-
-  maven-central-release:
-    name: Release to Maven Central
-    runs-on: ubuntu-latest
-    needs: [ build, security-scan ]
-    timeout-minutes: 30
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Verify GPG import
-        run: |
-          gpg --list-secret-keys --keyid-format LONG
-          echo "✅ GPG key imported successfully"
-
-      - name: Configure Maven Settings for Central
-        uses: whelk-io/maven-settings-xml-action@v22
-        with:
-          servers: |
-            [
-              {
-                "id": "central",
-                "username": "${env.CENTRAL_TOKEN_USERNAME}",
-                "password": "${env.CENTRAL_TOKEN_PASSWORD}"
-              }
-            ]
-
-      - name: Extract Version Info
-        id: version
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          
-          # Validate version matches tag
-          if [[ "v$VERSION" != "${GITHUB_REF#refs/tags/}" ]]; then
-            echo "::error::Version mismatch: POM version ($VERSION) doesn't match tag (${GITHUB_REF#refs/tags/})"
-            exit 1
-          fi
-
-      - name: Check if version exists on Maven Central
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          # Check if version exists on Maven Central using search API
-          SEARCH_RESULT=$(curl -s "https://search.maven.org/solrsearch/select?q=g:io.logdash+AND+a:logdash+AND+v:$VERSION&rows=1&wt=json")
-          COUNT=$(echo "$SEARCH_RESULT" | jq -r '.response.numFound')
-          
-          if [[ "$COUNT" != "0" ]]; then
-            echo "::error::Version $VERSION already exists on Maven Central"
-            echo "Cannot redeploy existing version to Maven Central"
-            exit 1
-          else
-            echo "✅ Version $VERSION is available for Maven Central release"
-          fi
-
-      - name: Build and Deploy to Maven Central
-        run: |
-          mvn clean deploy -B --no-transfer-progress \
-            -Pmaven-central-release \
-            -DskipTests=true \
-            -Dgpg.keyname="$GPG_KEY_ID"
+          token=$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 -w0)
+          published=$(curl -fsS -H "Authorization: Bearer $token" "https://central.sonatype.com/api/v1/publisher/published?namespace=io.logdash&name=logdash&version=$V" | jq -r '.published')
+          echo "published=$published" >> "$GITHUB_OUTPUT"
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-
-      - name: Verify Maven Central Deployment
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          # Check if artifact appears in Central Portal (deployment confirmation)
-          if curl -s -f "https://central.sonatype.com/api/internal/browse/component?namespace=io.logdash&name=logdash&version=$VERSION" > /dev/null; then
-            echo "✅ Deployment confirmed via Central Portal API"
-          else
-            echo "⚠️ Not yet visible via Central Portal API (may take time to propagate)"
-          fi
-
-      - name: Notify Maven Central Success
-        run: |
-          echo "✅ Successfully deployed logdash:${{ steps.version.outputs.version }} to Maven Central"
-          echo "📦 Will be available at: https://central.sonatype.com/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
-          echo "🌐 Maven Central: https://search.maven.org/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
-          echo "⏱️ Note: It may take up to 2 hours for the artifact to be searchable via Maven Central"
-
-  create-github-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: [ github-release, maven-central-release ]
-    timeout-minutes: 10
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
+      - if: steps.central.outputs.published != 'true'
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-
-      - name: Extract Version Info
-        id: version
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build Release Artifacts
-        run: |
-          mvn clean package -B --no-transfer-progress -DskipTests=true
-          mkdir -p release-assets
-          cp target/logdash-${{ steps.version.outputs.version }}.jar release-assets/
-          cp target/logdash-${{ steps.version.outputs.version }}-sources.jar release-assets/
-          cp target/logdash-${{ steps.version.outputs.version }}-javadoc.jar release-assets/
-          
-          # Create checksums
-          cd release-assets
-          sha256sum *.jar > checksums.sha256
-          cd ..
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+          cache: maven
+          server-id: central
+          server-username-env-var: CENTRAL_TOKEN_USERNAME
+          server-password-env-var: CENTRAL_TOKEN_PASSWORD
+      # Imports the signing key and gives gpg-agent its passphrase.
+      - if: steps.central.outputs.published != 'true'
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
-          files: |
-            release-assets/*.jar
-            release-assets/checksums.sha256
-          generate_release_notes: true
-          draft: false
-          body: |
-            # 🚀 Logdash Java SDK ${{ steps.version.outputs.version }}
-            
-            Official Java SDK for [Logdash.io](https://logdash.io) – Zero-configuration observability for developers.
-            
-            ## ✨ Features
-            
-            - **Zero Configuration**: Start logging and tracking metrics in seconds
-            - **Real-time Dashboard**: Cloud-hosted interface with live data updates
-            - **Structured Logging**: Multiple log levels with rich context support
-            - **Custom Metrics**: Track counters, gauges, and business metrics
-            - **Async & Fast**: Non-blocking, production-ready, framework-agnostic
-            - **Java 17+ Compatible**: Works with Java 17, 21, 22+
-            
-            ## 📦 Installation
-            
-            **Maven Central**
-            ```xml
-            <dependency>
-                <groupId>io.logdash</groupId>
-                <artifactId>logdash</artifactId>
-                <version>${{ steps.version.outputs.version }}</version>
-            </dependency>
-            ```
-            
-            **Gradle**
-            ```gradle
-            implementation 'io.logdash:logdash:${{ steps.version.outputs.version }}'
-            ```
-            
-            ## 🏁 Quick Start
-            
-            ```java
-            var logdash = Logdash.builder()
-                .apiKey("your-api-key")
-                .build();
-            
-            logdash.logger().info("Application started");
-            logdash.metrics().mutate("app_starts", 1);
-            ```
-            
-            ## ⚙️ Requirements
-            
-            - Java 17 or higher
-            - Internet connection
-            - Logdash API key ([get yours](https://logdash.io))
-            
-            ## 📖 Documentation & Support
-            
-            - [Full Documentation](https://logdash.io/docs)
-            - [Live Demo](https://logdash.io/demo-dashboard)
-            - [GitHub Issues](https://github.com/logdash-io/java-sdk/issues)
-            - [Discord Community](https://discord.gg/naftPW4Hxe)
-            - [Email Support](mailto:contact@logdash.io)
-            
-            ---
-            
-            _See below for full release notes and change log._
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - if: steps.central.outputs.published != 'true'
+        run: mvn -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.23.0:set -DnewVersion="$V" -DgenerateBackupPoms=false
+      # Signs, uploads to the Central Portal, and waits until it is published.
+      - if: steps.central.outputs.published != 'true'
+        run: mvn clean deploy -B --no-transfer-progress -Pmaven-central-release -DskipTests -Dgpg.keyname="$GPG_KEY_ID"
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+      # Last, since it creates the tag that marks the version released.
+      - run: gh release create "v$V" --generate-notes --target "$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
-      - name: Deployment Summary
-        run: |
-          echo "📋 Deployment Status Summary:"
-          echo "✅ GitHub Packages: ${{ needs.github-release.result }}"
-          echo "✅ Maven Central: ${{ needs.maven-central-release.result }}"
-          echo "📦 Version: ${{ steps.version.outputs.version }}"
-          echo "🔗 Maven Central: https://central.sonatype.com/artifact/io.logdash/logdash/${{ steps.version.outputs.version }}"
-
-  notification:
-    name: Notification
-    runs-on: ubuntu-latest
-    needs: [ validate, test, build, security-scan, github-release, maven-central-release ]
-    if: always() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-
-    steps:
-      - name: Check Workflow Status
-        run: |
-          if [[ "${{ needs.validate.result }}" == "failure" || "${{ needs.test.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
-            echo "❌ Workflow failed"
-            echo "::error::Critical job failed"
-          elif [[ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]]; then
-            if [[ "${{ needs.github-release.result }}" == "success" && "${{ needs.maven-central-release.result }}" == "success" ]]; then
-              echo "🎉 Release completed successfully!"
-              echo "📦 Available on GitHub Packages and Maven Central"
-            else
-              echo "⚠️ Release partially failed"
-              echo "GitHub Release: ${{ needs.github-release.result }}"
-              echo "Maven Central: ${{ needs.maven-central-release.result }}"
-            fi
-          else
-            echo "✅ Workflow completed successfully on main branch"
-          fi
+  # Installs the version just released from Maven Central and checks that its logs and metrics arrive.
+  check-deployed-package:
+    needs: [ version, release ]
+    uses: ./.github/workflows/check-deployed-package.yml
+    with:
+      version: ${{ needs.version.outputs.next }}
+    secrets:
+      LOGDASH_API_KEY: ${{ secrets.LOGDASH_API_KEY }}
+      LOGDASH_PERSONAL_API_KEY: ${{ secrets.LOGDASH_PERSONAL_API_KEY }}
