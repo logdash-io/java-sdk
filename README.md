@@ -352,7 +352,6 @@ Logdash logdash = Logdash.builder()
 - **Use structured logging** for better searchability and performance
 - **Avoid logging sensitive data** (passwords, tokens, PII)
 - **The SDK is async** - logging calls return immediately without blocking
-- **Memory efficient** - automatic batching and resource management
 
 ## Getting Your API Key
 
