@@ -105,6 +105,7 @@ class LogdashTest {
                              .requestTimeoutMs(20000L)
                              .shutdownTimeoutMs(15000L)
                              .maxConcurrentRequests(50)
+                             .app("desktop")
                              .build()) {
 
             // Assert
@@ -118,6 +119,7 @@ class LogdashTest {
             assertThat(config.requestTimeoutMs()).isEqualTo(20000L);
             assertThat(config.shutdownTimeoutMs()).isEqualTo(15000L);
             assertThat(config.maxConcurrentRequests()).isEqualTo(50);
+            assertThat(config.app()).isEqualTo("desktop");
         }
     }
 
@@ -163,6 +165,7 @@ class LogdashTest {
             assertThat(config.requestTimeoutMs()).isEqualTo(15000L);
             assertThat(config.shutdownTimeoutMs()).isEqualTo(10000L);
             assertThat(config.maxConcurrentRequests()).isEqualTo(20);
+            assertThat(config.app()).isNull();
         }
     }
 

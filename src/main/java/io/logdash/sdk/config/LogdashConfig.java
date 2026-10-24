@@ -20,6 +20,8 @@ import java.net.URISyntaxException;
  * @param requestTimeoutMs      HTTP request timeout in milliseconds
  * @param shutdownTimeoutMs     Maximum time to wait for graceful shutdown
  * @param maxConcurrentRequests Maximum number of concurrent HTTP requests
+ * @param app                   Name of the app sent with every log and metric, trimmed; null when
+ *                              not set or blank
  */
 public record LogdashConfig(
         String apiKey,
@@ -30,7 +32,8 @@ public record LogdashConfig(
         long retryDelayMs,
         long requestTimeoutMs,
         long shutdownTimeoutMs,
-        int maxConcurrentRequests) {
+        int maxConcurrentRequests,
+        String app) {
     private static final int MIN_API_KEY_LENGTH = 3;
     private static final int MAX_API_KEY_LENGTH = 256;
 
@@ -43,6 +46,7 @@ public record LogdashConfig(
                 requestTimeoutMs,
                 shutdownTimeoutMs,
                 maxConcurrentRequests);
+        app = app == null || app.isBlank() ? null : app.strip();
     }
 
     /**
@@ -120,6 +124,7 @@ public record LogdashConfig(
         private long requestTimeoutMs = 15000L;
         private long shutdownTimeoutMs = 10000L;
         private int maxConcurrentRequests = 10;
+        private String app = null;
 
         private Builder() {
         }
@@ -169,6 +174,11 @@ public record LogdashConfig(
             return this;
         }
 
+        public Builder app(String app) {
+            this.app = app;
+            return this;
+        }
+
         /**
          * Builds the LogdashConfig instance with the configured settings.
          *
@@ -185,7 +195,8 @@ public record LogdashConfig(
                     retryDelayMs,
                     requestTimeoutMs,
                     shutdownTimeoutMs,
-                    maxConcurrentRequests);
+                    maxConcurrentRequests,
+                    app);
         }
     }
 }

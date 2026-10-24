@@ -245,6 +245,7 @@ public final class Logdash implements AutoCloseable {
         private long requestTimeoutMs = 15000L;
         private long shutdownTimeoutMs = 10000L;
         private int maxConcurrentRequests = 20;
+        private String app;
 
         private Builder() {
         }
@@ -343,6 +344,31 @@ public final class Logdash implements AutoCloseable {
         }
 
         /**
+         * Sets the name of the app that sends the data, such as {@code desktop}, {@code api} or
+         * {@code landing}.
+         *
+         * <p>The domain key is shared by all apps of a domain, and {@code app} names this one, so the
+         * dashboard can filter logs and metrics by app. Every log and metric this instance sends
+         * carries it. With a domain key, the app is created on first use. Older service keys ignore
+         * {@code app}.
+         *
+         * <pre>{@code
+         * var logdash = Logdash.builder()
+         *         .apiKey(System.getenv("LOGDASH_API_KEY"))
+         *         .app("api")
+         *         .build();
+         * }</pre>
+         *
+         * @param app the app name (defaults to none; blank means none; the server cuts it to 64
+         *            characters)
+         * @return this builder
+         */
+        public Builder app(String app) {
+            this.app = app;
+            return this;
+        }
+
+        /**
          * Builds the Logdash instance with the configured settings.
          *
          * @return a new Logdash instance
@@ -366,7 +392,8 @@ public final class Logdash implements AutoCloseable {
                             retryDelayMs,
                             requestTimeoutMs,
                             shutdownTimeoutMs,
-                            maxConcurrentRequests);
+                            maxConcurrentRequests,
+                            app);
             return new Logdash(config);
         }
     }

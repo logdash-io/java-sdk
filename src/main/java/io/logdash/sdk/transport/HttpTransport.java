@@ -61,7 +61,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
      */
     public HttpTransport(LogdashConfig config) {
         this.config = config;
-        this.serializer = new JsonSerializer();
+        this.serializer = new JsonSerializer(config.app());
         this.rateLimiter = new Semaphore(config.maxConcurrentRequests(), true);
         this.executorService = createOptimizedExecutorService();
         this.httpClient = createOptimizedHttpClient();

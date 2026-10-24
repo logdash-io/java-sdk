@@ -282,6 +282,22 @@ metrics.set("memory_usage_mb", 512.5);
 metrics.set("queue_size", 0);
 ```
 
+## Apps
+
+A domain has one ingest key, the domain key, shared by all apps of that domain, such as a desktop app, an API and a landing page.
+Set `app` to name this app, so the dashboard can filter logs and metrics by app:
+
+```java
+var logdash = Logdash.builder()
+        .apiKey(System.getenv("LOGDASH_API_KEY")) // the domain key
+        .app("api")
+        .build();
+```
+
+Every log and metric this instance sends carries `"app": "api"`.
+With a domain key, the app is created on first use.
+Older service keys ignore `app`.
+
 ## View Your Data
 
 To see the logs or metrics, go to your project dashboard at [logdash.io](https://logdash.io/app/clusters)
@@ -315,20 +331,19 @@ Logdash logdash = Logdash.builder()
         .build();
 ```
 
-## Configuration
-
 ### All Configuration Options
 
 |        Parameter        |         Default          |           Description            |
 |-------------------------|--------------------------|----------------------------------|
 | `apiKey`                | `null`                   | Your Logdash API key (required)  |
+| `app`                   | `null`                   | App name sent with logs/metrics  |
 | `baseUrl`               | `https://api.logdash.io` | Logdash API endpoint             |
 | `enableConsoleOutput`   | `true`                   | Show logs/metrics in console     |
 | `enableVerboseLogging`  | `false`                  | Enable SDK debug output          |
 | `requestTimeoutMs`      | `15000`                  | HTTP request timeout             |
 | `maxRetries`            | `3`                      | Failed request retry attempts    |
 | `retryDelayMs`          | `500`                    | Base delay between retries       |
-| `maxConcurrentRequests` | `10`                     | Maximum concurrent HTTP requests |
+| `maxConcurrentRequests` | `20`                     | Maximum concurrent HTTP requests |
 | `shutdownTimeoutMs`     | `10000`                  | Graceful shutdown timeout        |
 
 ## Performance Considerations
@@ -337,7 +352,6 @@ Logdash logdash = Logdash.builder()
 - **Use structured logging** for better searchability and performance
 - **Avoid logging sensitive data** (passwords, tokens, PII)
 - **The SDK is async** - logging calls return immediately without blocking
-- **Memory efficient** - automatic batching and resource management
 
 ## Getting Your API Key
 

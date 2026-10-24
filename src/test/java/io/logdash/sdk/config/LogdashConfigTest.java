@@ -2,6 +2,9 @@ package io.logdash.sdk.config;
 
 import io.logdash.sdk.exception.LogdashException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -21,6 +24,7 @@ class LogdashConfigTest {
                         .requestTimeoutMs(15000L)
                         .shutdownTimeoutMs(10000L)
                         .maxConcurrentRequests(10)
+                        .app("desktop")
                         .build();
 
         // Assert
@@ -33,6 +37,7 @@ class LogdashConfigTest {
         assertThat(config.requestTimeoutMs()).isEqualTo(15000L);
         assertThat(config.shutdownTimeoutMs()).isEqualTo(10000L);
         assertThat(config.maxConcurrentRequests()).isEqualTo(10);
+        assertThat(config.app()).isEqualTo("desktop");
     }
 
     @Test
@@ -50,6 +55,27 @@ class LogdashConfigTest {
         assertThat(config.requestTimeoutMs()).isEqualTo(15000L);
         assertThat(config.shutdownTimeoutMs()).isEqualTo(10000L);
         assertThat(config.maxConcurrentRequests()).isEqualTo(10);
+        assertThat(config.app()).isNull();
+    }
+
+    @Test
+    void should_trim_app() {
+        // Act
+        var config = LogdashConfig.builder().app("  desktop  ").build();
+
+        // Assert
+        assertThat(config.app()).isEqualTo("desktop");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "\t", "\n"})
+    void should_treat_blank_app_as_unset(String app) {
+        // Act
+        var config = LogdashConfig.builder().app(app).build();
+
+        // Assert
+        assertThat(config.app()).isNull();
     }
 
     @Test
@@ -178,7 +204,8 @@ class LogdashConfigTest {
                         1000L,
                         15000L,
                         10000L,
-                        10
+                        10,
+                        null
                 )
         ).isInstanceOf(LogdashException.class)
                 .hasMessageContaining("Base URL cannot be null or blank");
