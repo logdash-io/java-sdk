@@ -25,6 +25,7 @@ env:
     -Daether.connector.http.connectionMaxTtl=25
     -Dmaven.artifact.threads=8
 
+# Maven runs as ./mvnw, the version .mvn/wrapper pins, so a runner image update cannot change the build.
 jobs:
   validate:
     name: Code Quality & Security
@@ -50,19 +51,19 @@ jobs:
           timeout_minutes: 10
           max_attempts: 2
           retry_wait_seconds: 30
-          command: mvn clean validate compile -B --no-transfer-progress -DskipTests
+          command: ./mvnw clean validate compile -B --no-transfer-progress -DskipTests
 
       # The quality profile's execution, which fails on a warning; a bare dependency:analyze only warns.
       - name: Verify Dependencies
         run: |
-          mvn test-compile dependency:analyze-only@analyze-dependencies -B --no-transfer-progress -Pquality
-          mvn dependency:tree -B --no-transfer-progress | tee dependency-tree.txt
+          ./mvnw test-compile dependency:analyze-only@analyze-dependencies -B --no-transfer-progress -Pquality
+          ./mvnw dependency:tree -B --no-transfer-progress | tee dependency-tree.txt
 
       - name: Code Style Check (Spotless)
-        run: mvn spotless:check -B --no-transfer-progress
+        run: ./mvnw spotless:check -B --no-transfer-progress
 
       - name: Security Analysis (SpotBugs)
-        run: mvn spotbugs:check -B --no-transfer-progress
+        run: ./mvnw spotbugs:check -B --no-transfer-progress
 
       - name: Upload Dependency Tree
         uses: actions/upload-artifact@v7
@@ -102,7 +103,7 @@ jobs:
           timeout_minutes: 20
           max_attempts: 3
           retry_wait_seconds: 30
-          command: mvn clean verify -B --no-transfer-progress -Djava.version=${{ matrix.java }}
+          command: ./mvnw clean verify -B --no-transfer-progress -Djava.version=${{ matrix.java }}
 
       - name: Upload coverage reports to Codecov
         if: matrix.java == 17
@@ -162,7 +163,7 @@ jobs:
       # Online, Trivy fetches the dependencies' poms from Maven Central, which rate-limits it (429) and
       # fails the scan. Maven puts them in ~/.m2 instead, where Trivy's offline scan finds them.
       - name: Resolve Dependencies for Security Scan
-        run: for pom in pom.xml examples/*/pom.xml; do mvn dependency:tree -B --no-transfer-progress -q -f "$pom"; done
+        run: for pom in pom.xml examples/*/pom.xml; do ./mvnw dependency:tree -B --no-transfer-progress -q -f "$pom"; done
 
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -227,7 +228,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: maven
-          server-id: central
+          server-id: central-portal
           server-username-env-var: CENTRAL_TOKEN_USERNAME
           server-password-env-var: CENTRAL_TOKEN_PASSWORD
       # Imports the signing key and gives gpg-agent its passphrase.
@@ -237,10 +238,10 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
       - if: steps.central.outputs.published != 'true'
-        run: mvn -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.23.0:set -DnewVersion="$V" -DgenerateBackupPoms=false
+        run: ./mvnw -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.23.0:set -DnewVersion="$V" -DgenerateBackupPoms=false
       # Signs, uploads to the Central Portal, and waits until it is published.
       - if: steps.central.outputs.published != 'true'
-        run: mvn clean deploy -B --no-transfer-progress -Pmaven-central-release -DskipTests -Dgpg.keyname="$GPG_KEY_ID"
+        run: ./mvnw clean deploy -B --no-transfer-progress -Pmaven-central-release -DskipTests -Dgpg.keyname="$GPG_KEY_ID"
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
