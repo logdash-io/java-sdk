@@ -19,6 +19,7 @@ public class Check {
                 Logdash.builder()
                         .apiKey(System.getenv("LOGDASH_API_KEY"))
                         .baseUrl(System.getenv().getOrDefault("LOGDASH_API_URL", "https://api.logdash.io"))
+                        .app("java-sdk")
                         .build()) {
             var logger = logdash.logger();
             var metrics = logdash.metrics();

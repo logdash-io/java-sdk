@@ -1,15 +1,15 @@
 #!/bin/sh
 # Checks the SDK as Maven Central serves it: installs it in a clean container, sends logs and metrics
 # with it, and reads them back.
-#   LOGDASH_API_KEY: the ingest key of the smoke-test project, which sends.
+#   LOGDASH_API_KEY: the ingest key of the "SDK smoke tests" domain, which sends as the app java-sdk.
 #   LOGDASH_PERSONAL_API_KEY: an ldp_ personal API key with logs:read and metrics:read, restricted to
-#     that one project, which reads back.
+#     that one domain, which reads back.
 #   LOGDASH_VERSION: the version to check; empty checks the latest release.
 #   LOGDASH_API_URL: the API both halves talk to, https://api.logdash.io by default.
 set -eu
 
-: "${LOGDASH_API_KEY:?must be the ingest key of the smoke-test project}"
-: "${LOGDASH_PERSONAL_API_KEY:?must be a personal API key that reads the smoke-test project}"
+: "${LOGDASH_API_KEY:?must be the ingest key of the smoke-test domain}"
+: "${LOGDASH_PERSONAL_API_KEY:?must be a personal API key that reads the smoke-test domain}"
 API=${LOGDASH_API_URL:-https://api.logdash.io}
 CENTRAL=https://repo.maven.apache.org/maven2/io/logdash/logdash
 VERSION=${LOGDASH_VERSION:-$(curl -fsS "$CENTRAL/maven-metadata.xml" | sed -n 's:.*<release>\(.*\)</release>.*:\1:p')}
@@ -47,12 +47,12 @@ WHOAMI=$(get /personal-api-keys/whoami) || {
     echo "Error: whoami rejects LOGDASH_PERSONAL_API_KEY: $WHOAMI"
     exit 1
 }
-PROJECT_ID=$(printf '%s' "$WHOAMI" | jq -r 'if .access.kind == "projects" and (.access.ids | length) == 1 then .access.ids[0] else empty end')
-if [ -z "$PROJECT_ID" ]; then
-    echo "Error: LOGDASH_PERSONAL_API_KEY must be restricted to the one smoke-test project: $WHOAMI"
+DOMAIN_ID=$(printf '%s' "$WHOAMI" | jq -r 'if .access.kind == "clusters" and (.access.ids | length) == 1 then .access.ids[0] else empty end')
+if [ -z "$DOMAIN_ID" ]; then
+    echo "Error: LOGDASH_PERSONAL_API_KEY must be restricted to the one smoke-test domain: $WHOAMI"
     exit 1
 fi
-echo "Reading back from project $PROJECT_ID"
+echo "Reading back from domain $DOMAIN_ID"
 
 EXPECTED_LOGS=$(jq -n --arg seed "$LOGS_SEED" '[
     ["info", "This is an info log \($seed)"],
@@ -68,7 +68,7 @@ EXPECTED_USERS=$((METRICS_SEED + 1))
 # Ingestion is asynchronous, so each read-back retries for a minute.
 LOGS='' MISSING='' tries=0
 until
-    LOGS=$(get "/projects/$PROJECT_ID/logs/v2?limit=100&searchString=$LOGS_SEED") &&
+    LOGS=$(get "/clusters/$DOMAIN_ID/logs?apps=java-sdk&limit=100&searchString=$LOGS_SEED") &&
         MISSING=$(printf '%s' "$LOGS" | jq -r --argjson want "$EXPECTED_LOGS" '$want - [.[] | [.level, .message]] | .[] | join(": ")') &&
         [ -z "$MISSING" ]
 do
@@ -83,8 +83,8 @@ echo "✓ Found a log of each of the 7 levels"
 
 METRICS='' USERS='' tries=0
 until
-    METRICS=$(get "/projects/$PROJECT_ID/metrics") &&
-        USERS=$(printf '%s' "$METRICS" | jq -r '.[] | select(.name == "users_java") | .value') &&
+    METRICS=$(get "/clusters/$DOMAIN_ID/metrics") &&
+        USERS=$(printf '%s' "$METRICS" | jq -r '.[] | select(.app == "java-sdk" and .name == "users_java") | .value') &&
         [ "$USERS" = "$EXPECTED_USERS" ]
 do
     tries=$((tries + 1))
