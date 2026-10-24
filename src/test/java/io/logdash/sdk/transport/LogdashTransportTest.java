@@ -1,5 +1,6 @@
 package io.logdash.sdk.transport;
 
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.log.LogLevel;
 import io.logdash.sdk.metrics.MetricEntry;
@@ -53,6 +54,11 @@ class LogdashTransportTest {
 
         @Override
         public CompletableFuture<Void> sendMetric(MetricEntry metricEntry) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> sendEvent(EventEntry eventEntry) {
             return CompletableFuture.completedFuture(null);
         }
 

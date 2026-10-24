@@ -1,6 +1,7 @@
 package io.logdash.sdk.transport;
 
 import io.logdash.sdk.config.LogdashConfig;
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.log.LogLevel;
 import io.logdash.sdk.metrics.MetricEntry;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -103,19 +105,23 @@ class NoOpTransportTest {
 
         var logEntry = new LogEntry("Test message", LogLevel.INFO, 1L);
         var metricEntry = new MetricEntry("test_metric", 42, MetricType.SET);
+        var eventEntry = new EventEntry("agent_run", Map.of("steps", 4), "42");
 
         // Act
         var logFuture = silentTransport.sendLog(logEntry);
         var metricFuture = silentTransport.sendMetric(metricEntry);
+        var eventFuture = silentTransport.sendEvent(eventEntry);
 
         // Assert
         assertThat(logFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
         assertThat(metricFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
+        assertThat(eventFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
 
         // Only initialization messages should be present (none in this case)
         var output = capturedOutput.toString();
         assertThat(output).doesNotContain("[LOG]");
         assertThat(output).doesNotContain("[METRIC]");
+        assertThat(output).doesNotContain("[EVENT]");
 
         silentTransport.close();
     }
@@ -126,15 +132,41 @@ class NoOpTransportTest {
         transport.close();
         var logEntry = new LogEntry("Test message", LogLevel.INFO, 1L);
         var metricEntry = new MetricEntry("test_metric", 42, MetricType.SET);
+        var eventEntry = new EventEntry("agent_run", Map.of("steps", 4), "42");
 
         // Act
         var logFuture = transport.sendLog(logEntry);
         var metricFuture = transport.sendMetric(metricEntry);
+        var eventFuture = transport.sendEvent(eventEntry);
 
         // Assert
         assertThat(logFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
         assertThat(metricFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
-        assertThat(capturedOutput.toString()).contains("transport closed");
+        assertThat(eventFuture).succeedsWithin(100, TimeUnit.MILLISECONDS);
+        assertThat(capturedOutput.toString()).contains("transport closed").doesNotContain("[EVENT]");
+    }
+
+    @Test
+    void should_print_event_to_console_when_enabled() {
+        // Arrange
+        var eventEntry = new EventEntry("agent_run", Map.of("steps", 4), "42");
+
+        // Act
+        var future = transport.sendEvent(eventEntry);
+
+        // Assert
+        assertThat(future).succeedsWithin(100, TimeUnit.MILLISECONDS);
+        assertThat(stripAnsiCodes(capturedOutput.toString()))
+                .contains("[EVENT] agent_run {steps=4} (userId=42)");
+    }
+
+    @Test
+    void should_print_event_without_props_or_user_id() {
+        // Act
+        transport.sendEvent(new EventEntry("signup", null, null));
+
+        // Assert
+        assertThat(stripAnsiCodes(capturedOutput.toString())).containsPattern("\\[EVENT] signup\\R");
     }
 
     @Test

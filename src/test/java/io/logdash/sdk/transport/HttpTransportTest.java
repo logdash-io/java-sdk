@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -589,7 +591,7 @@ class HttpTransportTest {
     }
 
     @Test
-    void should_use_efficient_countdownlatch_for_flush() throws InterruptedException {
+    void should_flush_as_soon_as_pending_requests_finish() throws InterruptedException {
         // Arrange
         wireMockServer.stubFor(
                 post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200).withFixedDelay(300)));
@@ -618,6 +620,70 @@ class HttpTransportTest {
         assertThat(allFutures).succeedsWithin(1, TimeUnit.SECONDS);
 
         wireMockServer.verify(3, postRequestedFor(urlEqualTo("/logs")));
+    }
+
+    @Test
+    void should_stop_waiting_for_a_hanging_request_at_the_flush_and_shutdown_timeouts()
+            throws InterruptedException {
+        // Arrange
+        wireMockServer.stubFor(
+                post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200).withFixedDelay(3000)));
+        var hangingConfig =
+                LogdashConfig.builder()
+                        .apiKey("test-api-key")
+                        .baseUrl("http://localhost:" + wireMockServer.port())
+                        .enableVerboseLogging(true)
+                        .requestTimeoutMs(5000L)
+                        .shutdownTimeoutMs(300L)
+                        .build();
+        var originalOut = System.out;
+        var capturedOut = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(capturedOut));
+
+        try (var hangingTransport = new HttpTransport(hangingConfig)) {
+            hangingTransport.sendLog(new LogEntry("Hanging", LogLevel.INFO, 1L));
+
+            // Act & Assert
+            assertThat(hangingTransport.flush()).succeedsWithin(2, TimeUnit.SECONDS);
+            assertThat(hangingTransport.shutdown().orElseThrow()).succeedsWithin(2, TimeUnit.SECONDS);
+        } finally {
+            System.setOut(originalOut);
+        }
+
+        assertThat(capturedOut.toString())
+                .contains("Flush timeout, 1 requests still pending")
+                .contains("Shutdown timeout exceeded, 1 requests may be lost");
+
+        // close() interrupted the hanging request, which must not be retried
+        Thread.sleep(300);
+        wireMockServer.verify(1, postRequestedFor(urlEqualTo("/logs")));
+    }
+
+    @Test
+    @Timeout(10)
+    void should_drop_requests_waiting_for_a_slot_on_close() throws InterruptedException {
+        // Arrange: the first request holds the only slot, so the second one waits for it
+        wireMockServer.stubFor(
+                post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200).withFixedDelay(150)));
+        var singleSlotConfig =
+                LogdashConfig.builder()
+                        .apiKey("test-api-key")
+                        .baseUrl("http://localhost:" + wireMockServer.port())
+                        .maxConcurrentRequests(1)
+                        .build();
+        var singleSlotTransport = new HttpTransport(singleSlotConfig);
+        singleSlotTransport.sendLog(new LogEntry("Sending", LogLevel.INFO, 1L));
+        while (wireMockServer.findAll(postRequestedFor(urlEqualTo("/logs"))).isEmpty()) {
+            Thread.sleep(5);
+        }
+        var waiting = singleSlotTransport.sendLog(new LogEntry("Waiting", LogLevel.INFO, 2L));
+
+        // Act
+        singleSlotTransport.close();
+
+        // Assert
+        assertThat(waiting).succeedsWithin(1, TimeUnit.SECONDS);
+        wireMockServer.verify(1, postRequestedFor(urlEqualTo("/logs")));
     }
 
     @Test

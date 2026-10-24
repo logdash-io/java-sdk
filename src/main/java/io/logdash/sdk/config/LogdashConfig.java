@@ -13,15 +13,15 @@ import java.net.URISyntaxException;
  *
  * @param apiKey                API key for authenticating with Logdash.io
  * @param baseUrl               Base URL for the Logdash API (defaults to https://api.logdash.io)
- * @param enableConsoleOutput   Whether to output logs and metrics to console
+ * @param enableConsoleOutput   Whether to output logs, metrics and events to console
  * @param enableVerboseLogging  Whether to enable verbose internal logging
  * @param maxRetries            Maximum number of retry attempts for failed requests
  * @param retryDelayMs          Delay between retry attempts in milliseconds
  * @param requestTimeoutMs      HTTP request timeout in milliseconds
  * @param shutdownTimeoutMs     Maximum time to wait for graceful shutdown
  * @param maxConcurrentRequests Maximum number of concurrent HTTP requests
- * @param app                   Name of the app sent with every log and metric, trimmed; null when
- *                              not set or blank
+ * @param app                   Name of the app sent with every log, metric and event, trimmed; null
+ *                              when not set or blank
  */
 public record LogdashConfig(
         String apiKey,

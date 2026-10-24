@@ -1,6 +1,7 @@
 package io.logdash.sdk.transport;
 
 import io.logdash.sdk.config.LogdashConfig;
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.metrics.MetricEntry;
 
@@ -14,8 +15,8 @@ import java.util.concurrent.CompletableFuture;
  * No-operation transport that outputs observability data to console only.
  *
  * <p>This transport is used as a fallback when no API key is provided or when HTTP transport
- * initialization fails. It provides local visibility into logs and metrics without sending data to
- * external services.
+ * initialization fails. It provides local visibility into logs, metrics and events without sending
+ * data to external services.
  *
  * <p>Useful for development, testing, and scenarios where external connectivity is not available or
  * desired.
@@ -27,6 +28,7 @@ public final class NoOpTransport implements LogdashTransport {
     private static final String RESET = "\u001B[0m";
     private static final String CYAN = "\u001B[36m";
     private static final String YELLOW = "\u001B[33m";
+    private static final String GREEN = "\u001B[32m";
 
     private final LogdashConfig config;
     private volatile boolean closed = false;
@@ -70,6 +72,19 @@ public final class NoOpTransport implements LogdashTransport {
     }
 
     @Override
+    public CompletableFuture<Void> sendEvent(EventEntry eventEntry) {
+        if (closed) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        if (config.enableConsoleOutput()) {
+            printEventToConsole(eventEntry);
+        }
+
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
     public Optional<CompletableFuture<Void>> shutdown() {
         return Optional.empty();
     }
@@ -104,5 +119,17 @@ public final class NoOpTransport implements LogdashTransport {
                 metricEntry.operation().getValue().toUpperCase(Locale.ENGLISH),
                 metricEntry.name(),
                 metricEntry.value());
+    }
+
+    private void printEventToConsole(EventEntry eventEntry) {
+        var timestamp = OffsetDateTime.now().format(CONSOLE_FORMATTER);
+        System.out.printf(
+                "%s [%sEVENT%s] %s%s%s%n",
+                timestamp,
+                GREEN,
+                RESET,
+                eventEntry.name(),
+                eventEntry.props().isEmpty() ? "" : " " + eventEntry.props(),
+                eventEntry.userId() == null ? "" : " (userId=" + eventEntry.userId() + ")");
     }
 }
