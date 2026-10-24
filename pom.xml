@@ -65,7 +65,7 @@
         <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
         <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.12.0</central-publishing-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -530,28 +530,17 @@
         <!-- Maven Central Release Profile -->
         <profile>
             <id>maven-central-release</id>
-            <distributionManagement>
-                <repository>
-                    <id>central</id>
-                    <name>Central Repository</name>
-                    <url>https://central.sonatype.com/api/v1/publisher</url>
-                </repository>
-                <snapshotRepository>
-                    <id>central</id>
-                    <name>Central Repository Snapshots</name>
-                    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
-                </snapshotRepository>
-            </distributionManagement>
             <build>
                 <plugins>
-                    <!-- Central Publishing Maven Plugin -->
+                    <!-- Central Publishing Maven Plugin: deploys in place of maven-deploy-plugin, so the profile needs no distributionManagement -->
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
                         <version>${central-publishing-maven-plugin.version}</version>
                         <extensions>true</extensions>
                         <configuration>
-                            <publishingServerId>central</publishingServerId>
+                            <!-- Not central, the id of the repository Maven downloads from, so Maven never offers the Portal token there -->
+                            <publishingServerId>central-portal</publishingServerId>
                             <autoPublish>true</autoPublish>
                             <waitUntil>published</waitUntil>
                             <checksums>required</checksums>
