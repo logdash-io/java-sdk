@@ -1,5 +1,6 @@
 package io.logdash.sdk.transport;
 
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.metrics.MetricEntry;
 
@@ -9,9 +10,9 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Transport interface for sending observability data to Logdash platform.
  *
- * <p>Implementations handle the actual delivery mechanism for logs and metrics, whether through
- * HTTP, console output, or other means. All operations are asynchronous to avoid blocking the
- * application.
+ * <p>Implementations handle the actual delivery mechanism for logs, metrics and events, whether
+ * through HTTP, console output, or other means. All operations are asynchronous to avoid blocking
+ * the application.
  */
 public interface LogdashTransport {
 
@@ -30,6 +31,14 @@ public interface LogdashTransport {
      * @return a future that completes when the operation finishes
      */
     CompletableFuture<Void> sendMetric(MetricEntry metricEntry);
+
+    /**
+     * Sends an event entry asynchronously to the transport destination.
+     *
+     * @param eventEntry the event entry to send
+     * @return a future that completes when the operation finishes
+     */
+    CompletableFuture<Void> sendEvent(EventEntry eventEntry);
 
     /**
      * Initiates graceful shutdown of the transport.

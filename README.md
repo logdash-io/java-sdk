@@ -282,6 +282,19 @@ metrics.set("memory_usage_mb", 512.5);
 metrics.set("queue_size", 0);
 ```
 
+## Events
+
+Track what happens in your app, such as an agent run:
+
+```java
+logdash.track("agent_run", Map.of("agent", "support", "steps", 4, "success", true), user.id());
+```
+
+Events show up in the domain's Analytics as goals, with a daily trend.
+Pass the user ID for signed-in users, so one person counts once across the website and apps.
+Without it, Logdash counts a visitor of that app that changes every day.
+Never put personal data in props.
+
 ## Apps
 
 A domain has one ingest key, the domain key, shared by all apps of that domain, such as a desktop app, an API and a landing page.
@@ -294,7 +307,7 @@ var logdash = Logdash.builder()
         .build();
 ```
 
-Every log and metric this instance sends carries `"app": "api"`.
+Every log, metric and event this instance sends carries `"app": "api"`.
 With a domain key, the app is created on first use.
 Older service keys ignore `app`.
 
@@ -336,7 +349,7 @@ Logdash logdash = Logdash.builder()
 |        Parameter        |         Default          |           Description            |
 |-------------------------|--------------------------|----------------------------------|
 | `apiKey`                | `null`                   | Your Logdash API key (required)  |
-| `app`                   | `null`                   | App name sent with logs/metrics  |
+| `app`                   | `null`                   | App name sent with all data      |
 | `baseUrl`               | `https://api.logdash.io` | Logdash API endpoint             |
 | `enableConsoleOutput`   | `true`                   | Show logs/metrics in console     |
 | `enableVerboseLogging`  | `false`                  | Enable SDK debug output          |

@@ -1,12 +1,14 @@
 package io.logdash.sdk;
 
 import io.logdash.sdk.config.LogdashConfig;
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.log.LogdashLogger;
 import io.logdash.sdk.metrics.LogdashMetrics;
 import io.logdash.sdk.transport.HttpTransport;
 import io.logdash.sdk.transport.LogdashTransport;
 import io.logdash.sdk.transport.NoOpTransport;
 
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -14,9 +16,9 @@ import java.util.concurrent.TimeoutException;
 /**
  * Main entry point for the Logdash Java SDK.
  *
- * <p>This class provides access to logging and metrics functionality for sending observability data
- * to the Logdash.io platform. It manages the underlying transport layer and provides a simple API
- * for developers to integrate observability into their applications.
+ * <p>This class provides access to logging, metrics and event tracking for sending observability
+ * data to the Logdash.io platform. It manages the underlying transport layer and provides a simple
+ * API for developers to integrate observability into their applications.
  *
  * <p>The SDK automatically handles HTTP transport with retry logic, rate limiting, and graceful
  * shutdown. If no API key is provided or HTTP transport fails, it falls back to console-only mode.
@@ -103,6 +105,58 @@ public final class Logdash implements AutoCloseable {
     }
 
     /**
+     * Tracks an event without properties or a user.
+     *
+     * @param name the event name, matching {@code ^[a-z][a-z0-9_]{0,63}$}
+     * @see #track(String, Map, String)
+     */
+    public void track(String name) {
+        track(name, Map.of(), null);
+    }
+
+    /**
+     * Tracks an event with properties and no user.
+     *
+     * @param name  the event name, matching {@code ^[a-z][a-z0-9_]{0,63}$}
+     * @param props flat properties with string, number or boolean values
+     * @see #track(String, Map, String)
+     */
+    public void track(String name, Map<String, Object> props) {
+        track(name, props, null);
+    }
+
+    /**
+     * Tracks an event, such as an agent run, for the domain's Analytics.
+     *
+     * <p>Like logs, the event is sent in the background, and this method never throws. Flush and
+     * close send pending events too. Without an API key, the event is printed to the console only.
+     *
+     * <p>An invalid name, a name of the website tracker ({@code pageview}, {@code pageleave} or
+     * {@code browser_error}), or a user ID that contains {@code @} drops the event, with a warning
+     * when verbose logging is on.
+     *
+     * <pre>{@code
+     * logdash.track("agent_run", Map.of("agent", "support", "steps", 4), user.id());
+     * }</pre>
+     *
+     * @param name   the event name, matching {@code ^[a-z][a-z0-9_]{0,63}$}
+     * @param props  up to 10 flat properties with keys matching {@code ^[a-z][a-z0-9_]{0,39}$} and
+     *               string, number or boolean values; never personal data
+     * @param userId the signed-in user's internal ID, never an email address, so one person counts
+     *               once across the website and apps; null counts a visitor of this app that
+     *               changes every day
+     */
+    public void track(String name, Map<String, Object> props, String userId) {
+        try {
+            transport.sendEvent(new EventEntry(name, props, userId));
+        } catch (RuntimeException e) {
+            if (config.enableVerboseLogging()) {
+                System.err.println("Warning: Event dropped: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
      * Returns the configuration used by this instance.
      *
      * @return the immutable configuration object
@@ -112,7 +166,7 @@ public final class Logdash implements AutoCloseable {
     }
 
     /**
-     * Flushes all pending logs and metrics synchronously.
+     * Flushes all pending logs, metrics and events synchronously.
      *
      * <p>Blocks until all queued requests complete or the configured timeout is reached. This method
      * is useful for ensuring all data is sent before application shutdown.
@@ -267,7 +321,7 @@ public final class Logdash implements AutoCloseable {
         }
 
         /**
-         * Enables or disables console output for logs and metrics.
+         * Enables or disables console output for logs, metrics and events.
          *
          * @param enableConsoleOutput true to enable console output
          * @return this builder
@@ -348,9 +402,9 @@ public final class Logdash implements AutoCloseable {
          * {@code landing}.
          *
          * <p>The domain key is shared by all apps of a domain, and {@code app} names this one, so the
-         * dashboard can filter logs and metrics by app. Every log and metric this instance sends
-         * carries it. With a domain key, the app is created on first use. Older service keys ignore
-         * {@code app}.
+         * dashboard can filter logs and metrics by app. Every log, metric and event this instance
+         * sends carries it. With a domain key, the app is created on first use. Older service keys
+         * ignore {@code app}.
          *
          * <pre>{@code
          * var logdash = Logdash.builder()

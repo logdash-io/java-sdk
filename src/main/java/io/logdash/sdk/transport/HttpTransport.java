@@ -1,6 +1,7 @@
 package io.logdash.sdk.transport;
 
 import io.logdash.sdk.config.LogdashConfig;
+import io.logdash.sdk.event.EventEntry;
 import io.logdash.sdk.exception.LogdashException;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.metrics.MetricEntry;
@@ -14,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -26,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <ul>
  *   <li>Non-blocking concurrency control using tryAcquire
- *   <li>Efficient request tracking with CountDownLatch
+ *   <li>Request tracking from submission, so flush and shutdown wait for every request sent
  *   <li>Optimized thread pool sizing
  *   <li>Fast retry logic with exponential backoff
  *   <li>Minimal synchronization overhead
@@ -36,6 +38,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
 
     private static final String LOGS_ENDPOINT = "/logs";
     private static final String METRICS_ENDPOINT = "/metrics";
+    private static final String EVENTS_ENDPOINT = "/events";
 
     private static final String API_KEY_HEADER = "project-api-key";
     private static final String USER_AGENT = "logdash-java-sdk/0.2.0";
@@ -49,9 +52,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
-    private final AtomicLong activeRequests = new AtomicLong(0);
-
-    private volatile CountDownLatch pendingRequestsLatch = new CountDownLatch(0);
+    private final Set<CompletableFuture<Void>> pendingRequests = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates a new HTTP transport with the specified configuration.
@@ -101,6 +102,21 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
         }
     }
 
+    @Override
+    public CompletableFuture<Void> sendEvent(EventEntry eventEntry) {
+        if (shutdownInitiated.get() || closed.get()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        try {
+            String json = serializer.serialize(eventEntry);
+            return sendWithRetry(EVENTS_ENDPOINT, json, "POST");
+        } catch (Exception e) {
+            handleTransportError("Failed to serialize event entry", e);
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
     /**
      * Sends an HTTP request with optimized retry logic and smart concurrency control. Uses tryAcquire
      * with timeout instead of immediate rejection for better throughput.
@@ -117,7 +133,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
 
         final long sequenceId = requestCounter.incrementAndGet();
 
-        return CompletableFuture.runAsync(
+        CompletableFuture<Void> request = CompletableFuture.runAsync(
                 () -> {
                     boolean acquired = false;
                     try {
@@ -130,13 +146,9 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                             return;
                         }
 
-                        if (shutdownInitiated.get() || closed.get()) {
+                        // A graceful shutdown still sends what was queued before it
+                        if (closed.get()) {
                             return;
-                        }
-
-                        long currentActive = activeRequests.incrementAndGet();
-                        if (currentActive == 1) {
-                            pendingRequestsLatch = new CountDownLatch(1);
                         }
 
                         Exception lastException = null;
@@ -179,14 +191,14 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                         if (acquired) {
                             rateLimiter.release();
                         }
-
-                        long remaining = activeRequests.decrementAndGet();
-                        if (remaining == 0) {
-                            pendingRequestsLatch.countDown();
-                        }
                     }
                 },
                 executorService);
+
+        // Tracked from submission, not from start, so a flush right after a send waits for it
+        pendingRequests.add(request);
+        request.whenComplete((result, error) -> pendingRequests.remove(request));
+        return request;
     }
 
     private void sendHttpRequest(
@@ -235,7 +247,7 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
     }
 
     /**
-     * Flushes all pending requests efficiently using CountDownLatch.
+     * Flushes all pending requests, including the ones still queued.
      *
      * @return a future that completes when all pending requests finish
      */
@@ -243,16 +255,15 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
         return CompletableFuture.runAsync(
                 () -> {
                     try {
-                        CountDownLatch currentLatch = pendingRequestsLatch;
-                        if (currentLatch != null && activeRequests.get() > 0) {
+                        if (!pendingRequests.isEmpty()) {
                             long timeoutMs = Math.min(config.shutdownTimeoutMs(), 5000);
-                            boolean completed = currentLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                            boolean completed = awaitPendingRequests(timeoutMs);
 
                             if (completed && config.enableVerboseLogging()) {
                                 System.out.println("All pending requests flushed successfully");
                             } else if (!completed && config.enableVerboseLogging()) {
                                 System.out.printf(
-                                        "Flush timeout, %d requests still pending%n", activeRequests.get());
+                                        "Flush timeout, %d requests still pending%n", pendingRequests.size());
                             }
                         }
                     } catch (InterruptedException e) {
@@ -273,23 +284,22 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                                         System.out.println("Initiating HTTP transport shutdown...");
                                     }
 
-                                    CountDownLatch currentLatch = pendingRequestsLatch;
                                     long timeoutMs = Math.min(config.shutdownTimeoutMs(), 3000);
 
-                                    if (currentLatch != null && activeRequests.get() > 0) {
+                                    if (!pendingRequests.isEmpty()) {
                                         if (config.enableVerboseLogging()) {
                                             System.out.printf(
-                                                    "Waiting for %d pending HTTP requests...%n", activeRequests.get());
+                                                    "Waiting for %d pending HTTP requests...%n", pendingRequests.size());
                                         }
 
-                                        boolean completed = currentLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                                        boolean completed = awaitPendingRequests(timeoutMs);
 
                                         if (completed && config.enableVerboseLogging()) {
                                             System.out.println("All HTTP requests completed successfully");
                                         } else if (!completed && config.enableVerboseLogging()) {
                                             System.out.printf(
                                                     "Shutdown timeout exceeded, %d requests may be lost%n",
-                                                    activeRequests.get());
+                                                    pendingRequests.size());
                                         }
                                     }
 
@@ -302,6 +312,25 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
                             executorService));
         }
         return Optional.of(CompletableFuture.completedFuture(null));
+    }
+
+    /**
+     * Waits for every request sent so far.
+     *
+     * @param timeoutMs the longest time to wait
+     * @return true when all of them finished within the timeout
+     */
+    private boolean awaitPendingRequests(long timeoutMs) throws InterruptedException {
+        try {
+            CompletableFuture.allOf(pendingRequests.toArray(new CompletableFuture<?>[0]))
+                    .get(timeoutMs, TimeUnit.MILLISECONDS);
+            return true;
+        } catch (ExecutionException e) {
+            // A request that failed has finished too
+            return true;
+        } catch (TimeoutException e) {
+            return false;
+        }
     }
 
     @Override

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.logdash.sdk.event.EventEntry;
+import io.logdash.sdk.exception.LogdashException;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.metrics.MetricEntry;
 
@@ -36,7 +38,7 @@ public final class JsonSerializer {
     }
 
     /**
-     * Creates a serializer that adds the app to every log and metric.
+     * Creates a serializer that adds the app to every log, metric and event.
      *
      * @param app the app name, or null to leave the {@code app} key out
      */
@@ -98,6 +100,32 @@ public final class JsonSerializer {
             return OBJECT_MAPPER.writeValueAsString(metricData);
         } catch (JsonProcessingException e) {
             return createFallbackMetricJson(metricEntry, e);
+        }
+    }
+
+    /**
+     * Serializes an event entry to JSON format, leaving out props, user ID and app when not set.
+     *
+     * @param eventEntry the event entry to serialize, must not be null
+     * @return JSON string representation
+     * @throws LogdashException if serialization fails
+     */
+    public String serialize(EventEntry eventEntry) {
+        var eventData =
+                new HashMap<String, Object>(Map.of("name", eventEntry.name(), "id", eventEntry.id()));
+        if (!eventEntry.props().isEmpty()) {
+            eventData.put("props", eventEntry.props());
+        }
+        if (eventEntry.userId() != null) {
+            eventData.put("userId", eventEntry.userId());
+        }
+        if (app != null) {
+            eventData.put("app", app);
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(eventData);
+        } catch (JsonProcessingException e) {
+            throw new LogdashException("Failed to serialize event " + eventEntry.name(), e);
         }
     }
 

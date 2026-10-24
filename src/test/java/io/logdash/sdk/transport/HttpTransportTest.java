@@ -589,7 +589,7 @@ class HttpTransportTest {
     }
 
     @Test
-    void should_use_efficient_countdownlatch_for_flush() throws InterruptedException {
+    void should_flush_as_soon_as_pending_requests_finish() throws InterruptedException {
         // Arrange
         wireMockServer.stubFor(
                 post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200).withFixedDelay(300)));
