@@ -11,6 +11,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.logdash.sdk.log.LogEntry;
 import io.logdash.sdk.metrics.MetricEntry;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -24,6 +25,24 @@ import java.util.Map;
  */
 public final class JsonSerializer {
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+
+    private final String app;
+
+    /**
+     * Creates a serializer that sends no app.
+     */
+    public JsonSerializer() {
+        this(null);
+    }
+
+    /**
+     * Creates a serializer that adds the app to every log and metric.
+     *
+     * @param app the app name, or null to leave the {@code app} key out
+     */
+    public JsonSerializer(String app) {
+        this.app = app;
+    }
 
     private static ObjectMapper createObjectMapper() {
         return JsonMapper.builder()
@@ -44,11 +63,15 @@ public final class JsonSerializer {
     public String serialize(LogEntry logEntry) {
         try {
             var logData =
-                    Map.of(
-                            "message", sanitizeString(logEntry.message()),
-                            "level", logEntry.level().getValue(),
-                            "createdAt", logEntry.createdAt(),
-                            "sequenceNumber", logEntry.sequenceNumber());
+                    new HashMap<String, Object>(
+                            Map.of(
+                                    "message", sanitizeString(logEntry.message()),
+                                    "level", logEntry.level().getValue(),
+                                    "createdAt", logEntry.createdAt(),
+                                    "sequenceNumber", logEntry.sequenceNumber()));
+            if (app != null) {
+                logData.put("app", app);
+            }
             return OBJECT_MAPPER.writeValueAsString(logData);
         } catch (JsonProcessingException e) {
             return createFallbackLogJson(logEntry, e);
@@ -64,10 +87,14 @@ public final class JsonSerializer {
     public String serialize(MetricEntry metricEntry) {
         try {
             var metricData =
-                    Map.of(
-                            "name", sanitizeString(metricEntry.name()),
-                            "value", sanitizeNumber(metricEntry.value()),
-                            "operation", metricEntry.operation().getValue());
+                    new HashMap<String, Object>(
+                            Map.of(
+                                    "name", sanitizeString(metricEntry.name()),
+                                    "value", sanitizeNumber(metricEntry.value()),
+                                    "operation", metricEntry.operation().getValue()));
+            if (app != null) {
+                metricData.put("app", app);
+            }
             return OBJECT_MAPPER.writeValueAsString(metricData);
         } catch (JsonProcessingException e) {
             return createFallbackMetricJson(metricEntry, e);

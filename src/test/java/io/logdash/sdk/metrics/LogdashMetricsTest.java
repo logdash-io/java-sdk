@@ -35,7 +35,8 @@ class LogdashMetricsTest {
                 1000L,
                 5000L,
                 10000L,
-                100
+                100,
+                null
         );
 
         given(transport.sendMetric(any())).willReturn(CompletableFuture.completedFuture(null));

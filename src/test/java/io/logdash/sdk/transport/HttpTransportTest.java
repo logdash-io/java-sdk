@@ -366,6 +366,58 @@ class HttpTransportTest {
     }
 
     @Test
+    void should_send_app_with_logs_and_metrics_when_set() {
+        // Arrange
+        wireMockServer.stubFor(post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200)));
+        wireMockServer.stubFor(put(urlEqualTo("/metrics")).willReturn(aResponse().withStatus(200)));
+
+        var configWithApp =
+                LogdashConfig.builder()
+                        .apiKey("test-api-key")
+                        .baseUrl("http://localhost:" + wireMockServer.port())
+                        .app("desktop")
+                        .build();
+
+        try (var appTransport = new HttpTransport(configWithApp)) {
+            // Act
+            var logFuture = appTransport.sendLog(new LogEntry("Test message", LogLevel.INFO, 1L));
+            var metricFuture =
+                    appTransport.sendMetric(new MetricEntry("test_metric", 42, MetricType.SET));
+
+            // Assert
+            assertThat(logFuture).succeedsWithin(3, TimeUnit.SECONDS);
+            assertThat(metricFuture).succeedsWithin(3, TimeUnit.SECONDS);
+        }
+
+        wireMockServer.verify(
+                postRequestedFor(urlEqualTo("/logs"))
+                        .withRequestBody(matchingJsonPath("$.app", equalTo("desktop"))));
+        wireMockServer.verify(
+                putRequestedFor(urlEqualTo("/metrics"))
+                        .withRequestBody(matchingJsonPath("$.app", equalTo("desktop"))));
+    }
+
+    @Test
+    void should_leave_app_out_of_logs_and_metrics_when_unset() {
+        // Arrange
+        wireMockServer.stubFor(post(urlEqualTo("/logs")).willReturn(aResponse().withStatus(200)));
+        wireMockServer.stubFor(put(urlEqualTo("/metrics")).willReturn(aResponse().withStatus(200)));
+
+        // Act
+        var logFuture = transport.sendLog(new LogEntry("Test message", LogLevel.INFO, 1L));
+        var metricFuture = transport.sendMetric(new MetricEntry("test_metric", 42, MetricType.SET));
+
+        // Assert
+        assertThat(logFuture).succeedsWithin(3, TimeUnit.SECONDS);
+        assertThat(metricFuture).succeedsWithin(3, TimeUnit.SECONDS);
+
+        wireMockServer.verify(
+                postRequestedFor(urlEqualTo("/logs")).withRequestBody(notContaining("\"app\"")));
+        wireMockServer.verify(
+                putRequestedFor(urlEqualTo("/metrics")).withRequestBody(notContaining("\"app\"")));
+    }
+
+    @Test
     @Timeout(15)
     void should_handle_high_throughput_requests_with_realistic_expectations()
             throws InterruptedException {

@@ -33,7 +33,7 @@ class LogdashLoggerTest {
     void setUp() {
         config =
                 new LogdashConfig(
-                        "test-key", "https://api.logdash.io", false, false, 3, 1000L, 5000L, 10000L, 100);
+                        "test-key", "https://api.logdash.io", false, false, 3, 1000L, 5000L, 10000L, 100, null);
 
         given(transport.sendLog(any())).willReturn(CompletableFuture.completedFuture(null));
         logger = new LogdashLogger(config, transport);
@@ -141,7 +141,7 @@ class LogdashLoggerTest {
         // Arrange
         var configWithConsole =
                 new LogdashConfig(
-                        "test-key", "https://api.logdash.io", true, false, 3, 1000L, 5000L, 10000L, 100);
+                        "test-key", "https://api.logdash.io", true, false, 3, 1000L, 5000L, 10000L, 100, null);
         var loggerWithConsole = new LogdashLogger(configWithConsole, transport);
 
         // Act & Assert
