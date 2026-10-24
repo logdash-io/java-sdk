@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -42,7 +43,11 @@ public final class HttpTransport implements LogdashTransport, AutoCloseable {
     private static final String EVENTS_ENDPOINT = "/events";
 
     private static final String API_KEY_HEADER = "project-api-key";
-    private static final String USER_AGENT = "logdash-java-sdk/0.2.0";
+    // The jar's Implementation-Version, the version CI releases; null when not run from the jar
+    private static final String USER_AGENT =
+            "logdash-java-sdk/"
+                    + Objects.requireNonNullElse(
+                            HttpTransport.class.getPackage().getImplementationVersion(), "unknown");
     private static final String CONTENT_TYPE = "application/json";
 
     private final LogdashConfig config;

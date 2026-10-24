@@ -1,126 +1,97 @@
 #!/bin/sh
-set -e
+# Checks the SDK as Maven Central serves it: installs it in a clean container, sends logs and metrics
+# with it, and reads them back.
+#   LOGDASH_API_KEY: the ingest key of the smoke-test project, which sends.
+#   LOGDASH_PERSONAL_API_KEY: an ldp_ personal API key with logs:read and metrics:read, restricted to
+#     that one project, which reads back.
+#   LOGDASH_VERSION: the version to check; empty checks the latest release.
+#   LOGDASH_API_URL: the API both halves talk to, https://api.logdash.io by default.
+set -eu
 
-# Generate random 5-character seed
-LOGS_SEED=$(openssl rand -hex 2 | cut -c1-5)
-echo "Generated seed: $LOGS_SEED"
-
-# Generate random metrics seed (1-1,000,000)
-METRICS_SEED=$(awk 'BEGIN{srand(); print int(rand()*1000000)+1}')
-echo "Generated metrics seed: $METRICS_SEED"
-
-echo "Building LogDash Java demo Docker image (using published package)..."
-docker build --no-cache \
-  -t logdash-java-demo \
-  -f check-deployed-package/Dockerfile .
-
-echo
-echo "Running LogDash Java demo..."
-echo
-
-# Run in non-interactive mode which works everywhere
-docker run --rm \
-  -e LOGDASH_API_KEY="${LOGDASH_API_KEY}" \
-  -e LOGS_SEED="${LOGS_SEED}" \
-  -e METRICS_SEED="${METRICS_SEED}" \
-  logdash-java-demo
-
-echo
-echo "Demo completed!" 
-
-echo
-echo "Authenticating with LogDash API..."
-
-# Authenticate with API using the API key
-AUTH_RESPONSE=$(curl -s -X 'POST' \
-  'https://api.logdash.io/auth/api-key' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d "{
-  \"apiKey\": \"${LOGDASH_API_KEY}\"
-}")
-
-# Extract token and projectId from response
-TOKEN=$(echo "$AUTH_RESPONSE" | grep -o '"token":"[^"]*"' | sed 's/"token":"\(.*\)"/\1/')
-PROJECT_ID=$(echo "$AUTH_RESPONSE" | grep -o '"projectId":"[^"]*"' | sed 's/"projectId":"\(.*\)"/\1/')
-
-if [ -z "$TOKEN" ] || [ -z "$PROJECT_ID" ]; then
-    echo "Error: Failed to authenticate with LogDash API"
-    echo "Response: $AUTH_RESPONSE"
+: "${LOGDASH_API_KEY:?must be the ingest key of the smoke-test project}"
+: "${LOGDASH_PERSONAL_API_KEY:?must be a personal API key that reads the smoke-test project}"
+API=${LOGDASH_API_URL:-https://api.logdash.io}
+CENTRAL=https://repo.maven.apache.org/maven2/io/logdash/logdash
+VERSION=${LOGDASH_VERSION:-$(curl -fsS "$CENTRAL/maven-metadata.xml" | sed -n 's:.*<release>\(.*\)</release>.*:\1:p')}
+VERSION=${VERSION#v}
+if [ -z "$VERSION" ]; then
+    echo "Error: no version to check, and Maven Central names no latest release"
     exit 1
 fi
 
-echo "Authentication successful. Project ID: $PROJECT_ID"
-
-echo
-echo "Fetching logs from LogDash API..."
-
-# Fetch logs from the API
-LOGS_RESPONSE=$(curl -s -X 'GET' \
-  "https://api.logdash.io/projects/${PROJECT_ID}/logs?limit=10" \
-  -H 'accept: application/json' \
-  -H "Authorization: Bearer ${TOKEN}")
-
-echo "Logs fetched successfully"
-
-echo
-echo "Validating log messages..."
-
-# Expected log messages with seed
-EXPECTED_MESSAGES="This is an info log ${LOGS_SEED}
-This is an error log ${LOGS_SEED}
-This is a warning log ${LOGS_SEED}
-This is a debug log ${LOGS_SEED}
-This is a http log ${LOGS_SEED}
-This is a silly log ${LOGS_SEED}
-This is an info log ${LOGS_SEED}
-This is a verbose log ${LOGS_SEED}"
-
-# Check if all expected messages are present in the logs
-echo "$EXPECTED_MESSAGES" | while IFS= read -r expected_msg; do
-    if ! echo "$LOGS_RESPONSE" | grep -q "$expected_msg"; then
-        echo "Error: Expected log message not found: '$expected_msg'"
-        echo "Logs response: $LOGS_RESPONSE"
+# A release reaches Maven Central some minutes after the Central Portal publishes it.
+echo "Waiting until Maven Central serves logdash $VERSION..."
+tries=0
+until curl -fsIo /dev/null "$CENTRAL/$VERSION/logdash-$VERSION.pom" && curl -fsIo /dev/null "$CENTRAL/$VERSION/logdash-$VERSION.jar"; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 120 ]; then
+        echo "Error: Maven Central does not serve logdash $VERSION after an hour"
         exit 1
     fi
-    echo "✓ Found: '$expected_msg'"
+    sleep 30
 done
 
-echo
-echo "Fetching metrics from LogDash API..."
+LOGS_SEED=$(openssl rand -hex 4)
+METRICS_SEED=$(awk 'BEGIN { srand(); print int(rand() * 1000000) + 1 }')
+echo "Logs seed: $LOGS_SEED, metrics seed: $METRICS_SEED"
 
-# Fetch metrics from the API
-METRICS_RESPONSE=$(curl -s -X 'GET' \
-  "https://api.logdash.io/projects/${PROJECT_ID}/metrics" \
-  -H 'accept: application/json' \
-  -H "Authorization: Bearer ${TOKEN}")
+docker build --no-cache --build-arg LOGDASH_VERSION="$VERSION" -t logdash-java-check -f check-deployed-package/Dockerfile .
+docker run --rm -e LOGDASH_API_KEY -e LOGDASH_API_URL="$API" -e LOGS_SEED="$LOGS_SEED" -e METRICS_SEED="$METRICS_SEED" logdash-java-check
 
-echo "Metrics fetched successfully"
+# GETs an API path with the personal key: prints the response, and fails on an HTTP error.
+get() {
+    curl -sS --fail-with-body -H "Authorization: Bearer $LOGDASH_PERSONAL_API_KEY" "$API$1"
+}
 
-echo
-echo "Validating metrics..."
-
-# Expected users metric value (metrics_seed + 1)
-EXPECTED_USERS_VALUE=$((METRICS_SEED + 1))
-
-# Check if users metric exists with correct value
-if ! echo "$METRICS_RESPONSE" | grep -q '"name":"users"'; then
-    echo "Error: Users metric not found"
-    echo "Metrics response: $METRICS_RESPONSE"
+WHOAMI=$(get /personal-api-keys/whoami) || {
+    echo "Error: whoami rejects LOGDASH_PERSONAL_API_KEY: $WHOAMI"
+    exit 1
+}
+PROJECT_ID=$(printf '%s' "$WHOAMI" | jq -r 'if .access.kind == "projects" and (.access.ids | length) == 1 then .access.ids[0] else empty end')
+if [ -z "$PROJECT_ID" ]; then
+    echo "Error: LOGDASH_PERSONAL_API_KEY must be restricted to the one smoke-test project: $WHOAMI"
     exit 1
 fi
+echo "Reading back from project $PROJECT_ID"
 
-# Extract the value of the users metric and check if it matches expected value
-USERS_VALUE=$(echo "$METRICS_RESPONSE" | sed 's/},{/}\n{/g' | grep '"name":"users"' | grep -o '"value":[0-9]*' | sed 's/"value"://')
+EXPECTED_LOGS=$(jq -n --arg seed "$LOGS_SEED" '[
+    ["info", "This is an info log \($seed)"],
+    ["error", "This is an error log \($seed)"],
+    ["warning", "This is a warning log \($seed)"],
+    ["debug", "This is a debug log \($seed)"],
+    ["http", "This is a http log \($seed)"],
+    ["silly", "This is a silly log \($seed)"],
+    ["verbose", "This is a verbose log \($seed)"]
+]')
+EXPECTED_USERS=$((METRICS_SEED + 1))
 
-if [ "$USERS_VALUE" != "$EXPECTED_USERS_VALUE" ]; then
-    echo "Error: Users metric value mismatch. Expected: $EXPECTED_USERS_VALUE, Found: $USERS_VALUE"
-    echo "Metrics response: $METRICS_RESPONSE"
-    exit 1
-fi
+# Ingestion is asynchronous, so each read-back retries for a minute.
+LOGS='' MISSING='' tries=0
+until
+    LOGS=$(get "/projects/$PROJECT_ID/logs/v2?limit=100&searchString=$LOGS_SEED") &&
+        MISSING=$(printf '%s' "$LOGS" | jq -r --argjson want "$EXPECTED_LOGS" '$want - [.[] | [.level, .message]] | .[] | join(": ")') &&
+        [ -z "$MISSING" ]
+do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 12 ]; then
+        printf 'Error: logs not found:\n%s\nResponse: %s\n' "$MISSING" "$LOGS"
+        exit 1
+    fi
+    sleep 5
+done
+echo "✓ Found a log of each of the 7 levels"
 
-echo "✓ Found users metric with correct value: $USERS_VALUE"
-
-echo
-echo "All expected log messages and metrics found successfully!"
-echo "Validation completed!"
+METRICS='' USERS='' tries=0
+until
+    METRICS=$(get "/projects/$PROJECT_ID/metrics") &&
+        USERS=$(printf '%s' "$METRICS" | jq -r '.[] | select(.name == "users_java") | .value') &&
+        [ "$USERS" = "$EXPECTED_USERS" ]
+do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 12 ]; then
+        echo "Error: metric users_java is ${USERS:-missing}, expected $EXPECTED_USERS. Response: $METRICS"
+        exit 1
+    fi
+    sleep 5
+done
+echo "✓ Found metric users_java = $USERS"

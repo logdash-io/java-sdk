@@ -71,7 +71,7 @@ Then use in your project:
 <dependency>
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.2.0</version>
+    <version>0.0.0-SNAPSHOT</version>
 </dependency>
 ```
 

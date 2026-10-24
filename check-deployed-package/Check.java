@@ -2,28 +2,27 @@ package io.logdash.check;
 
 import io.logdash.sdk.Logdash;
 
-
+/**
+ * Sends a log of each level and a metric with the SDK as published, for run.sh to read back.
+ */
 public class Check {
     public static void main(String[] args) {
-        System.out.println("=== LogDash Java SDK Demo ===");
-
-        // Get package version (would need to be handled differently in a real scenario)
-        System.out.println("Using logdash package version: " + getLogdashVersion());
-        System.out.println();
-
-        String apiKey = System.getenv("LOGDASH_API_KEY");
         String logsSeed = System.getenv().getOrDefault("LOGS_SEED", "default");
-        String metricsSeed = System.getenv().getOrDefault("METRICS_SEED", "1");
+        int metricsSeed = Integer.parseInt(System.getenv().getOrDefault("METRICS_SEED", "1"));
 
-        System.out.println("Using API Key: " + apiKey);
-        System.out.println("Using Logs Seed: " + logsSeed);
-        System.out.println("Using Metrics Seed: " + metricsSeed);
+        System.out.println("=== Logdash Java SDK check ===");
+        System.out.println("Using logdash " + System.getenv("LOGDASH_VERSION"));
+        System.out.println("Using logs seed: " + logsSeed);
+        System.out.println("Using metrics seed: " + metricsSeed);
 
-        try (Logdash logdash = Logdash.create(apiKey)) {
+        try (Logdash logdash =
+                Logdash.builder()
+                        .apiKey(System.getenv("LOGDASH_API_KEY"))
+                        .baseUrl(System.getenv().getOrDefault("LOGDASH_API_URL", "https://api.logdash.io"))
+                        .build()) {
             var logger = logdash.logger();
             var metrics = logdash.metrics();
 
-            // Log some messages with seed appended
             logger.info("This is an info log " + logsSeed);
             logger.error("This is an error log " + logsSeed);
             logger.warn("This is a warning log " + logsSeed);
@@ -33,25 +32,10 @@ public class Check {
             logger.info("This is an info log " + logsSeed);
             logger.verbose("This is a verbose log " + logsSeed);
 
-            // Set and mutate metrics with seed
-            int seedValue = Integer.parseInt(metricsSeed);
-            metrics.set("users", seedValue);
-            metrics.mutate("users", 1);
-
-            // Wait to ensure data is sent
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private static String getLogdashVersion() {
-        try {
-            return Check.class.getPackage().getImplementationVersion();
-        } catch (Exception e) {
-            return "unknown";
-        }
+            metrics.set("users_java", metricsSeed);
+            // The mutate adds to the set, so the set must arrive first
+            logdash.flush();
+            metrics.mutate("users_java", 1);
+        } // close sends what is still queued
     }
 }

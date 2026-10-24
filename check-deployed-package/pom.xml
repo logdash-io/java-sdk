@@ -4,7 +4,7 @@
 
     <groupId>io.logdash</groupId>
     <artifactId>check</artifactId>
-    <version>0.2.0</version>
+    <version>0.0.0-SNAPSHOT</version>
 
     <properties>
         <java.version>17</java.version>
@@ -18,23 +18,9 @@
         <dependency>
             <groupId>io.logdash</groupId>
             <artifactId>logdash</artifactId>
-            <version>0.2.0</version>
+            <version>${logdash.version}</version>
         </dependency>
     </dependencies>
-
-    <repositories>
-        <repository>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-        </repository>
-    </repositories>
 
     <build>
         <plugins>

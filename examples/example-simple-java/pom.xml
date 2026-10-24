@@ -58,25 +58,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>snapshot-repo</id>
-            <activation>
-                <property>
-                    <name>logdash.version</name>
-                    <value>*-SNAPSHOT</value>
-                </property>
-            </activation>
-            <repositories>
-                <repository>
-                    <snapshots>
-                        <enabled>true</enabled>
-                    </snapshots>
-                    <id>github-snapshots</id>
-                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-                </repository>
-            </repositories>
-        </profile>
-    </profiles>
 </project>

@@ -4,7 +4,8 @@
 
     <groupId>io.logdash</groupId>
     <artifactId>logdash</artifactId>
-    <version>0.2.0</version>
+    <!-- A placeholder: CI sets the version it releases, from the Conventional Commits since the last v* tag -->
+    <version>0.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Logdash Java SDK</name>
@@ -48,13 +49,14 @@
         <assertj.version>3.27.3</assertj.version>
         <wiremock.version>3.13.0</wiremock.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <jackson.version>2.19.0</jackson.version>
+        <jackson.version>2.22.4</jackson.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
         <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+        <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
         <spotbugs-maven-plugin.version>4.9.3.0</spotbugs-maven-plugin.version>
@@ -66,6 +68,19 @@
         <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- Jackson's modules share a version, except jackson-annotations, which has no patch version since 2.20 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Runtime Dependencies -->
         <dependency>
@@ -76,22 +91,18 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <!-- Test Dependencies -->
@@ -365,6 +376,20 @@
                 </executions>
             </plugin>
 
+            <!-- Jar Plugin: Implementation-Version in the manifest, for the User-Agent -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>${maven-jar-plugin.version}</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
             <!-- Source Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -496,43 +521,6 @@
                         <version>${maven-deploy-plugin.version}</version>
                         <configuration>
                             <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-
-        <!-- GitHub Packages Release Profile -->
-        <profile>
-            <id>github-release</id>
-            <activation>
-                <property>
-                    <name>performRelease</name>
-                    <value>true</value>
-                </property>
-            </activation>
-            <distributionManagement>
-                <repository>
-                    <id>github</id>
-                    <name>GitHub Packages</name>
-                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-                </repository>
-                <snapshotRepository>
-                    <id>github</id>
-                    <name>GitHub Packages</name>
-                    <url>https://maven.pkg.github.com/logdash-io/java-sdk</url>
-                </snapshotRepository>
-            </distributionManagement>
-            <build>
-                <plugins>
-                    <!-- Maven Deploy Plugin -->
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-deploy-plugin</artifactId>
-                        <version>${maven-deploy-plugin.version}</version>
-                        <configuration>
-                            <deployAtEnd>true</deployAtEnd>
-                            <skip>false</skip>
                         </configuration>
                     </plugin>
                 </plugins>

@@ -84,7 +84,7 @@ class HttpTransportTest {
                 postRequestedFor(urlEqualTo("/logs"))
                         .withHeader("Content-Type", equalTo("application/json"))
                         .withHeader("project-api-key", equalTo("test-api-key"))
-                        .withHeader("User-Agent", equalTo("logdash-java-sdk/0.2.0")));
+                        .withHeader("User-Agent", matching("logdash-java-sdk/.+")));
     }
 
     @Test
@@ -107,7 +107,7 @@ class HttpTransportTest {
                 putRequestedFor(urlEqualTo("/metrics"))
                         .withHeader("Content-Type", equalTo("application/json"))
                         .withHeader("project-api-key", equalTo("test-api-key"))
-                        .withHeader("User-Agent", equalTo("logdash-java-sdk/0.2.0")));
+                        .withHeader("User-Agent", matching("logdash-java-sdk/.+")));
     }
 
     @ParameterizedTest
